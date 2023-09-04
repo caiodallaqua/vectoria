@@ -1,0 +1,9 @@
+name: Pipeline
+
+on:
+  push:
+    branches: [main]
+    
+jobs:
+  test:
+    uses: mastrasec/vectoria/.github/workflows/test.yaml@main
