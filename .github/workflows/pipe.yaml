@@ -2,8 +2,12 @@ name: Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: 
+      - main
     
 jobs:
   test:
     uses: mastrasec/vectoria/.github/workflows/test.yaml@main
+  
+  spdx:
+    uses: mastrasec/vectoria/.github/workflows/spdx.yaml@main

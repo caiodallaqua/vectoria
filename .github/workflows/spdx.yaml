@@ -1,0 +1,49 @@
+name: SPDX
+
+on:
+  workflow_call:
+
+env:
+  SPDX_SBOM_GENERATOR_URL: https://github.com/opensbom-generator/spdx-sbom-generator/releases/download/v0.0.15/spdx-sbom-generator-v0.0.15-linux-amd64.tar.gz
+
+jobs:
+  generate:
+    name: Generate sbom file
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the repository
+        uses: actions/checkout@v3
+
+      - name: Download spdx-sbom-generator
+        run: wget -O spdx-sbom-generator.tar.gz $SPDX_SBOM_GENERATOR_URL
+      
+      - name: Extract spdx-sbom-generator binary
+        run: sudo tar -xf spdx-sbom-generator.tar.gz
+      
+      - name: Move spdx-sbom-generator binary
+        run: sudo mv spdx-sbom-generator /usr/bin
+      
+      - name: Setup go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: go.mod
+          cache: true
+      
+      - name: Run spdx-sbom-generator
+        run: spdx-sbom-generator
+      
+      - name: Check if sbom file generated
+        run: |
+          if [ ! -f "bom-go-mod.spdx" ]; then
+            echo "::error::bom-go-mod.spdx is missing, generate it using the spdx-sbom-generator cli."
+            exit 1
+          fi
+      
+      - name: Upload SPDX SBOM file
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: '*.spdx'
