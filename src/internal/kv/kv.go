@@ -9,9 +9,10 @@ import (
 
 type Contract interface {
 	CloseDB() error
-	Add(key, val []byte) error
-	Get(key []byte) (val []byte, err error)
+	Add(data map[string][]byte) error
+	Get(key string) (val []byte, err error)
 	getValuesWithPrefix(prefix []byte) (values [][]byte, err error)
+	Del(keys ...string) error
 }
 
 type KV struct {
@@ -24,7 +25,7 @@ func New(path string) (*KV, error) {
 		inMemory = true
 	}
 
-	opts := badger.DefaultOptions(path).WithInMemory(inMemory)
+	opts := badger.DefaultOptions(path).WithInMemory(inMemory).WithLogger(nil)
 
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -46,9 +47,14 @@ func (stg *KV) CloseDB() error {
 	return nil
 }
 
-func (stg *KV) Add(key, val []byte) error {
-	err := stg.db.Update(func(txn *badger.Txn) error {
-		return txn.Set(key, val)
+func (stg *KV) Add(data map[string][]byte) error {
+	err := stg.db.Update(func(txn *badger.Txn) (err error) {
+		for key, val := range data {
+			if err = txn.Set([]byte(key), val); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		logErr(err, "Add")
@@ -58,9 +64,9 @@ func (stg *KV) Add(key, val []byte) error {
 	return nil
 }
 
-func (stg *KV) Get(key []byte) (val []byte, err error) {
+func (stg *KV) Get(key string) (val []byte, err error) {
 	err = stg.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(key)
+		item, err := txn.Get([]byte(key))
 		if err != nil {
 			return err
 		}
@@ -116,6 +122,23 @@ func (stg *KV) getValuesWithPrefix(prefix []byte) (values [][]byte, err error) {
 	}
 
 	return values, nil
+}
+
+func (stg *KV) Del(keys ...string) error {
+	err := stg.db.Update(func(txn *badger.Txn) (err error) {
+		for _, key := range keys {
+			if err = txn.Delete([]byte(key)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logErr(err, "Del")
+		return err
+	}
+
+	return nil
 }
 
 func logErr(err error, trace string) {

@@ -4,6 +4,7 @@ go 1.21.0
 
 require (
 	github.com/dgraph-io/badger/v3 v3.2103.5
+	github.com/google/uuid v1.3.1
 	github.com/stretchr/testify v1.8.4
 )
 

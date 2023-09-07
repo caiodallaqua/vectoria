@@ -1,10 +1,21 @@
 package kv
 
 import (
+	"io"
+	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMain(m *testing.M) {
+	// Overwrites the logger to keep tests outputs clean
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	slog.SetDefault(logger)
+
+	os.Exit(m.Run())
+}
 
 func TestNew(t *testing.T) {
 	path := "/tmp/badger"
