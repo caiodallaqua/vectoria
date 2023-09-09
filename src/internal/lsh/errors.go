@@ -52,5 +52,5 @@ type errEmbeddingLen struct {
 }
 
 func (e *errEmbeddingLen) Error() string {
-	return fmt.Sprintf("space dimension must match embedding length(expected: %v, got: %v)", e.expected, e.got)
+	return fmt.Sprintf("embedding length must match space dimension (expected: %v, got: %v)", e.expected, e.got)
 }

@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"vectoria/src/internal/kv"
+	"vectoria/src/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -28,10 +28,10 @@ func TestNew(t *testing.T) {
 		spaceDim       = MIN_SPACE_DIM
 	)
 
-	storage, err := kv.New("")
+	kv, err := storage.New("")
 	assert.NoError(t, err)
 
-	l, err := New(storage, numRounds, numHyperPlanes, spaceDim)
+	l, err := New(kv, numRounds, numHyperPlanes, spaceDim)
 	assert.NoError(t, err)
 
 	assert.NotNil(t, l)
@@ -166,20 +166,21 @@ func TestValidateHyperParams_SpaceDim(t *testing.T) {
 }
 
 func TestSketches(t *testing.T) {
-	testCase := struct {
+	tc := struct {
 		numRounds      uint32
 		numHyperPlanes uint32
 		spaceDim       uint32
 		embedding      []float64
 	}{4, 5, 3, []float64{-9.5, 0.7, 6.2}}
 
-	l := setup(t, testCase.numRounds, testCase.numHyperPlanes, testCase.spaceDim)
+	opts := Opts{numRounds: tc.numRounds, numHyperPlanes: tc.numHyperPlanes, spaceDim: tc.spaceDim}
+	l := setup(t, opts)
 
-	sks, err := l.sketches(testCase.embedding)
+	sks, err := l.getSketches(tc.embedding)
 	assert.NoError(t, err)
 
 	for _, sk := range sks {
-		assert.Len(t, sk, int(testCase.numHyperPlanes))
+		assert.Len(t, sk, int(tc.numHyperPlanes))
 		assert.True(t, validSketchChars(sk))
 	}
 }
@@ -208,7 +209,8 @@ func TestAdd(t *testing.T) {
 		id:             uuid.NewString(),
 		embedding:      []float64{3.66, 8.5, 99},
 	}
-	l := setup(t, tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+	opts := Opts{numRounds: tc.numRounds, numHyperPlanes: tc.numHyperPlanes, spaceDim: tc.spaceDim}
+	l := setup(t, opts)
 	err := l.Add(tc.id, tc.embedding)
 	assert.NoError(t, err)
 }
@@ -219,7 +221,7 @@ func TestPrepareEmbedding(t *testing.T) {
 		embedding []float64
 	}{uuid.NewString(), []float64{1.3, -0.89}}
 
-	l := setup(t)
+	l := setup(t, Opts{})
 	data, err := l.prepareEmbedding(tc.id, tc.embedding)
 	assert.NoError(t, err)
 
@@ -259,7 +261,7 @@ func TestPrepareSketches(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		l := setup(t, tc.numRounds, tc.numHyperPlanes, MIN_SPACE_DIM)
+		l := setup(t, Opts{numRounds: tc.numRounds, numHyperPlanes: tc.numHyperPlanes})
 
 		t.Run(
 			tc.name,
@@ -279,7 +281,6 @@ func TestPrepareSketches(t *testing.T) {
 			},
 		)
 	}
-
 }
 
 func TestCheckSketches(t *testing.T) {
@@ -335,7 +336,7 @@ func TestCheckSketches(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		l := setup(t, tc.numRounds, tc.numHyperPlanes, MIN_SPACE_DIM)
+		l := setup(t, Opts{numRounds: tc.numRounds, numHyperPlanes: tc.numHyperPlanes})
 
 		t.Run(
 			tc.name,
@@ -375,7 +376,7 @@ func TestCheckEmbedding(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		l := setup(t, MIN_NUM_ROUNDS, MIN_NUM_HYPERPLANES, tc.spaceDim)
+		l := setup(t, Opts{spaceDim: tc.spaceDim})
 
 		t.Run(
 			tc.name,
@@ -411,29 +412,216 @@ func TestEncodeFloat64Slice(t *testing.T) {
 	}
 }
 
-// TODO: make it ergonomic, recalling parameter order sucks
-func setup(t *testing.T, params ...uint32) *LSH {
+func TestGetNeighbors(t *testing.T) {
+	testCases := []struct {
+		name       string
+		spaceDim   uint32
+		queryVec   []float64
+		threshold  float64
+		storedVecs map[string][]float64
+		err        error
+		want       []string
+	}{
+		{
+			name:       "empty queryVec with no storedVecs",
+			spaceDim:   2,
+			queryVec:   []float64{},
+			threshold:  0.8,
+			storedVecs: map[string][]float64{},
+			err:        new(errEmbeddingLen),
+			want:       nil,
+		},
+		{
+			name:       "queryVec length smaller than spaceDim with no storedVecs",
+			spaceDim:   2,
+			queryVec:   []float64{1.0},
+			threshold:  0.8,
+			storedVecs: map[string][]float64{},
+			err:        new(errEmbeddingLen),
+			want:       nil,
+		},
+		{
+			name:       "queryVec length greater than spaceDim with no storedVecs",
+			spaceDim:   2,
+			queryVec:   []float64{1.0, 2.0, 3.0},
+			threshold:  0.8,
+			storedVecs: map[string][]float64{},
+			err:        new(errEmbeddingLen),
+			want:       nil,
+		},
+		{
+			name:       "queryVec length matches spaceDim with no storedVecs",
+			spaceDim:   2,
+			queryVec:   []float64{1.0, 2.0},
+			threshold:  0.8,
+			storedVecs: map[string][]float64{},
+			err:        nil,
+			want:       []string{},
+		},
+		{
+			name:       "exact match above threshold",
+			spaceDim:   2,
+			queryVec:   []float64{1.0, 2.0},
+			threshold:  0.8,
+			storedVecs: map[string][]float64{"a": {1.0, 2.0}},
+			err:        nil,
+			want:       []string{"a"},
+		},
+		{
+			name:      "match above threshold",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0},
+			threshold: 0.98,
+			storedVecs: map[string][]float64{
+				"a": {1.0, 2.0}, // sim ~ 0.9999
+				"b": {3.0, 4.0}, // sim ~ 0.9838
+			},
+			err:  nil,
+			want: []string{"a", "b"},
+		},
+		{
+			name:      "partial match above threshold",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0},
+			threshold: 0.99,
+			storedVecs: map[string][]float64{
+				"a": {1.0, 2.0}, // sim ~ 0.9999
+				"b": {3.0, 4.0}, // sim ~ 0.9838
+			},
+			err:  nil,
+			want: []string{"a"},
+		},
+		{
+			name:      "no match above threshold",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0},
+			threshold: 0.99,
+			storedVecs: map[string][]float64{
+				"a": {3.0, 4.0}, // sim ~ 0.9838
+				"b": {5.0, 6.0}, // sim ~ 0.9734
+			},
+			err:  nil,
+			want: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(
+			tc.name,
+			func(t *testing.T) {
+				l := setup(t, Opts{spaceDim: tc.spaceDim})
+
+				for k, v := range tc.storedVecs {
+					err := l.Add(k, v)
+					assert.NoError(t, err)
+				}
+
+				got, err := l.GetNeighbors(tc.queryVec, tc.threshold)
+				assert.IsType(t, tc.err, err)
+				assert.ElementsMatch(t, tc.want, got)
+			},
+		)
+	}
+}
+
+// func FuzzGet(f *testing.F) {
+// 	f.Fuzz(func(t *testing.T){
+// 		l := setup(t, Opts{})
+// 		l.Get()
+// 	})
+
+// }
+
+func TestGetBucketIDs(t *testing.T) {
+	tc := struct {
+		id        string
+		embedding []float64
+	}{uuid.NewString(), []float64{1.31, 4.6}}
+
+	l := setup(t, Opts{numHyperPlanes: 10})
+
+	err := l.Add(tc.id, tc.embedding)
+	assert.NoError(t, err)
+
+	sks, err := l.getSketches(tc.embedding)
+	assert.NoError(t, err)
+
+	for _, sk := range sks {
+		ids, err := l.getBucketIDs(sk)
+		assert.NoError(t, err)
+		assert.Contains(t, ids, tc.id)
+	}
+}
+
+func TestGetEmbedding(t *testing.T) {
+	tc := struct {
+		id        string
+		embedding []float64
+	}{uuid.NewString(), []float64{1.31, 4.6}}
+
+	l := setup(t, Opts{})
+
+	err := l.Add(tc.id, tc.embedding)
+	assert.NoError(t, err)
+
+	got, err := l.getEmbedding(tc.id)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, tc.embedding, got)
+}
+
+func TestGetEmbeddingsFromBuckets(t *testing.T) {
+	tc := struct {
+		id        string
+		embedding []float64
+	}{uuid.NewString(), []float64{1.31, 4.6}}
+
+	l := setup(t, Opts{})
+
+	err := l.Add(tc.id, tc.embedding)
+	assert.NoError(t, err)
+
+	sks, err := l.getSketches(tc.embedding)
+	assert.NoError(t, err)
+
+	got, err := l.getEmbeddingsFromBuckets(sks)
+	assert.NoError(t, err)
+
+	assert.Contains(t, got, tc.id)
+	assert.ElementsMatch(t, got[tc.id], tc.embedding)
+}
+
+type Opts struct {
+	numRounds      uint32
+	numHyperPlanes uint32
+	spaceDim       uint32
+}
+
+func setup(t *testing.T, opts Opts) *LSH {
 	var (
 		l   *LSH
 		err error
 	)
 
-	storage, err := kv.New("")
-	assert.NoError(t, err)
+	assert.NotNil(t, opts)
 
-	lenParams := len(params)
-
-	switch lenParams {
-	case 0:
-		l, err = New(storage, MIN_NUM_ROUNDS, MIN_NUM_HYPERPLANES, MIN_SPACE_DIM)
-	case 3:
-		l, err = New(storage, params[0], params[1], params[2])
-	default:
-		err = errors.New("invalid number of parameters for setup")
+	if opts.numRounds == 0 {
+		opts.numRounds = MIN_NUM_ROUNDS
 	}
 
-	assert.NotNil(t, l)
+	if opts.numHyperPlanes == 0 {
+		opts.numHyperPlanes = MIN_NUM_HYPERPLANES
+	}
+
+	if opts.spaceDim == 0 {
+		opts.spaceDim = MIN_SPACE_DIM
+	}
+
+	storage, err := storage.New("")
 	assert.NoError(t, err)
+
+	l, err = New(storage, opts.numRounds, opts.numHyperPlanes, opts.spaceDim)
+	assert.NoError(t, err)
+	assert.NotNil(t, l)
 
 	return l
 }

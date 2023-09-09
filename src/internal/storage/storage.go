@@ -1,4 +1,4 @@
-package kv
+package storage
 
 import (
 	"context"
@@ -11,15 +11,15 @@ type Contract interface {
 	CloseDB() error
 	Add(data map[string][]byte) error
 	Get(key string) (val []byte, err error)
-	getValuesWithPrefix(prefix []byte) (values [][]byte, err error)
+	GetWithPrefix(prefix string) (values [][]byte, err error)
 	Del(keys ...string) error
 }
 
-type KV struct {
+type Storage struct {
 	db *badger.DB
 }
 
-func New(path string) (*KV, error) {
+func New(path string) (*Storage, error) {
 	var inMemory bool
 	if len(path) == 0 {
 		inMemory = true
@@ -33,12 +33,12 @@ func New(path string) (*KV, error) {
 		return nil, err
 	}
 
-	return &KV{
+	return &Storage{
 		db: db,
 	}, nil
 }
 
-func (stg *KV) CloseDB() error {
+func (stg *Storage) CloseDB() error {
 	if err := stg.db.Close(); err != nil {
 		logErr(err, "CloseDB")
 		return err
@@ -47,7 +47,7 @@ func (stg *KV) CloseDB() error {
 	return nil
 }
 
-func (stg *KV) Add(data map[string][]byte) error {
+func (stg *Storage) Add(data map[string][]byte) error {
 	err := stg.db.Update(func(txn *badger.Txn) (err error) {
 		for key, val := range data {
 			if err = txn.Set([]byte(key), val); err != nil {
@@ -64,7 +64,7 @@ func (stg *KV) Add(data map[string][]byte) error {
 	return nil
 }
 
-func (stg *KV) Get(key string) (val []byte, err error) {
+func (stg *Storage) Get(key string) (val []byte, err error) {
 	err = stg.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
 		if err != nil {
@@ -86,10 +86,11 @@ func (stg *KV) Get(key string) (val []byte, err error) {
 	return val, nil
 }
 
-func (stg *KV) getValuesWithPrefix(prefix []byte) (values [][]byte, err error) {
+func (stg *Storage) GetWithPrefix(prefix string) (values [][]byte, err error) {
 	var (
-		val  []byte
-		item *badger.Item
+		val           []byte
+		item          *badger.Item
+		encodedPrefix = []byte(prefix)
 	)
 
 	err = stg.db.View(func(txn *badger.Txn) error {
@@ -99,7 +100,7 @@ func (stg *KV) getValuesWithPrefix(prefix []byte) (values [][]byte, err error) {
 		it := txn.NewIterator(opts)
 		defer it.Close()
 
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		for it.Seek(encodedPrefix); it.ValidForPrefix(encodedPrefix); it.Next() {
 			item = it.Item()
 			val, err = item.ValueCopy(nil)
 			if err != nil {
@@ -124,7 +125,7 @@ func (stg *KV) getValuesWithPrefix(prefix []byte) (values [][]byte, err error) {
 	return values, nil
 }
 
-func (stg *KV) Del(keys ...string) error {
+func (stg *Storage) Del(keys ...string) error {
 	err := stg.db.Update(func(txn *badger.Txn) (err error) {
 		for _, key := range keys {
 			if err = txn.Delete([]byte(key)); err != nil {

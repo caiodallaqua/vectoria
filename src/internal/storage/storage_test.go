@@ -1,4 +1,4 @@
-package kv
+package storage
 
 import (
 	"io"
@@ -33,7 +33,7 @@ func TestCloseDB(t *testing.T) {
 	assert.True(t, stg.db.IsClosed())
 }
 
-func setup(t *testing.T) (*KV, error) {
+func setup(t *testing.T) (*Storage, error) {
 	stg, err := New("")
 	assert.NoError(t, err)
 	assert.NotNil(t, stg)
