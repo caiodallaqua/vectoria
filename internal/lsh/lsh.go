@@ -9,9 +9,9 @@ import (
 	"maps"
 	"strings"
 
-	"vectoria/src/internal/search"
-	"vectoria/src/internal/simhash"
-	"vectoria/src/internal/storage"
+	"github.com/mastrasec/vectoria/internal/semantic"
+	"github.com/mastrasec/vectoria/internal/simhash"
+	"github.com/mastrasec/vectoria/internal/storage"
 )
 
 const (
@@ -28,14 +28,14 @@ const (
 type LSH struct {
 	hashes []simhash.SimHash
 	kv     storage.Contract
-	srch   search.Contract
+	sem    semantic.Contract
 
 	numRounds      uint32
 	numHyperPlanes uint32
 	spaceDim       uint32
 }
 
-func New(storage storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (*LSH, error) {
+func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (*LSH, error) {
 	var (
 		sh  *simhash.SimHash
 		err error
@@ -47,20 +47,20 @@ func New(storage storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (
 	}
 
 	hashes := make([]simhash.SimHash, numRounds)
-	for idx := uint32(0); idx < numRounds; idx++ {
+	for i := uint32(0); i < numRounds; i++ {
 		sh, err = simhash.New(numHyperPlanes, spaceDim)
 		if err != nil {
 			logErr(err, "New")
 			return nil, err
 		}
 
-		hashes[idx] = *sh
+		hashes[i] = *sh
 	}
 
 	return &LSH{
 		hashes:         hashes,
-		kv:             storage,
-		srch:           search.New(),
+		kv:             kv,
+		sem:            semantic.New(),
 		numRounds:      numRounds,
 		numHyperPlanes: numHyperPlanes,
 		spaceDim:       spaceDim,
@@ -98,7 +98,7 @@ func (l *LSH) Add(id string, embedding []float64) error {
 	return nil
 }
 
-func (l *LSH) GetNeighbors(queryVec []float64, threshold float64) (neighbors []string, err error) {
+func (l *LSH) GetNeighbors(queryVec []float64, threshold float64, k uint32) (neighbors []string, err error) {
 	if err = l.checkEmbedding(queryVec); err != nil {
 		logErr(err, "GetNeighbors")
 		return nil, err
@@ -116,7 +116,7 @@ func (l *LSH) GetNeighbors(queryVec []float64, threshold float64) (neighbors []s
 		return nil, err
 	}
 
-	neighbors, err = l.srch.SimSearch(queryVec, candidates, threshold)
+	neighbors, err = l.sem.Search(queryVec, candidates, threshold, k)
 	if err != nil {
 		logErr(err, "GetNeighbors")
 		return nil, err
@@ -127,10 +127,10 @@ func (l *LSH) GetNeighbors(queryVec []float64, threshold float64) (neighbors []s
 
 func (l *LSH) getEmbeddingsFromBuckets(sks []string) (map[string][]float64, error) {
 	var (
-		ids    []string
-		err    error
-		exists bool
-		embed  []float64
+		ids   []string
+		err   error
+		ok    bool
+		embed []float64
 	)
 
 	data := make(map[string][]float64)
@@ -143,7 +143,7 @@ func (l *LSH) getEmbeddingsFromBuckets(sks []string) (map[string][]float64, erro
 		}
 
 		for _, id := range ids {
-			if _, exists = data[id]; !exists {
+			if _, ok = data[id]; !ok {
 				embed, err = l.getEmbedding(id)
 				if err != nil {
 					logErr(err, "getEmbeddingsFromBuckets")
@@ -166,8 +166,8 @@ func (l *LSH) getBucketIDs(sk string) ([]string, error) {
 
 	ids := make([]string, len(encodedIDs))
 
-	for idx, encodedID := range encodedIDs {
-		ids[idx] = string(encodedID)
+	for i, encodedID := range encodedIDs {
+		ids[i] = string(encodedID)
 	}
 
 	return ids, nil
@@ -309,14 +309,14 @@ func (l *LSH) getSketches(embedding []float64) ([]string, error) {
 
 	sketches := make([]string, len(l.hashes))
 
-	for idx, hash := range l.hashes {
+	for i, hash := range l.hashes {
 		sk, err = hash.Sketch(embedding)
 		if err != nil {
 			logErr(err, "getSketches")
 			return nil, err
 		}
 
-		sketches[idx] = sk
+		sketches[i] = sk
 	}
 
 	return sketches, nil

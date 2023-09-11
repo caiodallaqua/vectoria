@@ -52,7 +52,7 @@ func TestSketch(t *testing.T) {
 			},
 			embedding: []float64{4, 3, 2, 1},
 			sk:        "",
-			err:       errVectorsNotSameLen,
+			err:       new(vectorsNotSameLenError),
 		},
 	}
 
@@ -78,8 +78,8 @@ func TestGenerateHyperplanes(t *testing.T) {
 	}{
 		{2, 3, nil},
 		{3, 4, nil},
-		{0, 5, errNumHyperPlanes},
-		{1, 0, errSpaceDim},
+		{0, 5, new(numHyperPlanesError)},
+		{1, 0, new(spaceDimError)},
 	}
 
 	for _, tc := range testCases {
@@ -119,7 +119,7 @@ func TestDotProduct(t *testing.T) {
 			vecA:   []float64{1, 2},
 			vecB:   []float64{3, 4, 5},
 			result: 0,
-			err:    errVectorsNotSameLen,
+			err:    new(vectorsNotSameLenError),
 		},
 	}
 

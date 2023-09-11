@@ -1,26 +1,29 @@
-package search
+package semantic
 
 import (
 	"context"
 	"log/slog"
 	"math"
 	"slices"
+	"sort"
 )
 
 const EPSILON = 1e-10
 
-type Search struct{}
+type Semantic struct{}
 
 type Contract interface {
-	SimSearch(queryVec []float64, candidates map[string][]float64, threshold float64) (res []string, err error)
+	Search(queryVec []float64, candidates map[string][]float64, threshold float64, k uint32) (res []string, err error)
 }
 
-func New() *Search {
-	return &Search{}
+func New() *Semantic {
+	return &Semantic{}
 }
 
-func (s *Search) SimSearch(queryVec []float64, candidates map[string][]float64, threshold float64) (res []string, err error) {
-	res = make([]string, 0, len(candidates))
+func (s *Semantic) Search(queryVec []float64, candidates map[string][]float64, threshold float64, k uint32) (ids []string, err error) {
+	numCandidates := len(candidates)
+	ids = make([]string, 0, numCandidates)
+	simMap := make(map[string]float64, numCandidates)
 
 	queryVecNorm, err := euclideanNorm(queryVec)
 	if err != nil {
@@ -42,11 +45,22 @@ func (s *Search) SimSearch(queryVec []float64, candidates map[string][]float64, 
 		}
 
 		if sim >= threshold {
-			res = append(res, id)
+			simMap[id] = sim
+			ids = append(ids, id)
 		}
 	}
 
-	return slices.Clip(res), nil
+	sort.Slice(ids, func(i, j int) bool {
+		return simMap[ids[i]] > simMap[ids[j]]
+	})
+
+	ids = slices.Clip(ids)
+
+	if k == 0 || k > uint32(len(ids)) {
+		return ids, nil
+	}
+
+	return ids[:k], nil
 }
 
 func cosineSim(vecA, vecB []float64, normA, normB float64) (sim float64, err error) {
@@ -68,7 +82,7 @@ func euclideanNorm(vec []float64) (float64, error) {
 	var err error
 
 	if len(vec) == 0 {
-		err = new(errEmptyVector)
+		err = new(emptyVectorError)
 		logErr(err, "dotProduct")
 		return 0, err
 	}
@@ -84,7 +98,7 @@ func euclideanNorm(vec []float64) (float64, error) {
 
 func dotProduct(vecA, vecB []float64) (res float64, err error) {
 	if len(vecA) != len(vecB) {
-		err = new(errVectorsNotSameLen)
+		err = new(vectorsNotSameLenError)
 		logErr(err, "dotProduct")
 		return 0, err
 	}

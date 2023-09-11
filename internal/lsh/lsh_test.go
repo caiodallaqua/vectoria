@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"vectoria/src/internal/storage"
+	"github.com/mastrasec/vectoria/internal/storage"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -226,8 +226,8 @@ func TestPrepareEmbedding(t *testing.T) {
 	assert.NoError(t, err)
 
 	k := key("embedding", tc.id)
-	gotEncoded, exists := data[k]
-	if !exists {
+	gotEncoded, ok := data[k]
+	if !ok {
 		t.Errorf("expected key to exist: %v", k)
 	}
 
@@ -272,8 +272,8 @@ func TestPrepareSketches(t *testing.T) {
 
 				for _, sk := range tc.sks {
 					k := key(sk, tc.id)
-					got, exists := data[k]
-					if !exists {
+					got, ok := data[k]
+					if !ok {
 						t.Errorf("expected key to exist: %v", k)
 					}
 					assert.Equal(t, tc.id, string(got))
@@ -418,6 +418,7 @@ func TestGetNeighbors(t *testing.T) {
 		spaceDim   uint32
 		queryVec   []float64
 		threshold  float64
+		k          uint32
 		storedVecs map[string][]float64
 		err        error
 		want       []string
@@ -427,6 +428,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:   2,
 			queryVec:   []float64{},
 			threshold:  0.8,
+			k:          0,
 			storedVecs: map[string][]float64{},
 			err:        new(errEmbeddingLen),
 			want:       nil,
@@ -436,6 +438,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:   2,
 			queryVec:   []float64{1.0},
 			threshold:  0.8,
+			k:          0,
 			storedVecs: map[string][]float64{},
 			err:        new(errEmbeddingLen),
 			want:       nil,
@@ -445,6 +448,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:   2,
 			queryVec:   []float64{1.0, 2.0, 3.0},
 			threshold:  0.8,
+			k:          0,
 			storedVecs: map[string][]float64{},
 			err:        new(errEmbeddingLen),
 			want:       nil,
@@ -454,6 +458,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:   2,
 			queryVec:   []float64{1.0, 2.0},
 			threshold:  0.8,
+			k:          0,
 			storedVecs: map[string][]float64{},
 			err:        nil,
 			want:       []string{},
@@ -463,6 +468,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:   2,
 			queryVec:   []float64{1.0, 2.0},
 			threshold:  0.8,
+			k:          0,
 			storedVecs: map[string][]float64{"a": {1.0, 2.0}},
 			err:        nil,
 			want:       []string{"a"},
@@ -472,6 +478,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:  2,
 			queryVec:  []float64{1.0, 2.0},
 			threshold: 0.98,
+			k:         0,
 			storedVecs: map[string][]float64{
 				"a": {1.0, 2.0}, // sim ~ 0.9999
 				"b": {3.0, 4.0}, // sim ~ 0.9838
@@ -484,6 +491,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:  2,
 			queryVec:  []float64{1.0, 2.0},
 			threshold: 0.99,
+			k:         0,
 			storedVecs: map[string][]float64{
 				"a": {1.0, 2.0}, // sim ~ 0.9999
 				"b": {3.0, 4.0}, // sim ~ 0.9838
@@ -496,6 +504,7 @@ func TestGetNeighbors(t *testing.T) {
 			spaceDim:  2,
 			queryVec:  []float64{1.0, 2.0},
 			threshold: 0.99,
+			k:         0,
 			storedVecs: map[string][]float64{
 				"a": {3.0, 4.0}, // sim ~ 0.9838
 				"b": {5.0, 6.0}, // sim ~ 0.9734
@@ -516,21 +525,13 @@ func TestGetNeighbors(t *testing.T) {
 					assert.NoError(t, err)
 				}
 
-				got, err := l.GetNeighbors(tc.queryVec, tc.threshold)
+				got, err := l.GetNeighbors(tc.queryVec, tc.threshold, tc.k)
 				assert.IsType(t, tc.err, err)
 				assert.ElementsMatch(t, tc.want, got)
 			},
 		)
 	}
 }
-
-// func FuzzGet(f *testing.F) {
-// 	f.Fuzz(func(t *testing.T){
-// 		l := setup(t, Opts{})
-// 		l.Get()
-// 	})
-
-// }
 
 func TestGetBucketIDs(t *testing.T) {
 	tc := struct {

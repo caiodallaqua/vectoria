@@ -1,4 +1,4 @@
-package search
+package semantic
 
 import (
 	"fmt"
@@ -19,12 +19,13 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestSimSearch(t *testing.T) {
+func TestSearch(t *testing.T) {
 	testCases := []struct {
 		name       string
 		queryVec   []float64
 		candidates map[string][]float64
 		threshold  float64
+		k          uint32
 		want       []string
 		err        error
 	}{
@@ -33,6 +34,7 @@ func TestSimSearch(t *testing.T) {
 			queryVec:   []float64{1.0, 2.0, 3.0},
 			candidates: map[string][]float64{},
 			threshold:  0.5,
+			k:          0,
 			want:       []string{},
 			err:        nil,
 		},
@@ -44,6 +46,7 @@ func TestSimSearch(t *testing.T) {
 				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
 			},
 			threshold: 0.99,
+			k:         0,
 			want:      []string{"a"},
 			err:       nil,
 		},
@@ -55,6 +58,7 @@ func TestSimSearch(t *testing.T) {
 				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
 			},
 			threshold: 0.97,
+			k:         0,
 			want:      []string{"a", "b"},
 			err:       nil,
 		},
@@ -67,6 +71,7 @@ func TestSimSearch(t *testing.T) {
 				"c": {7.0, 8.0, 9.0}, // sim ~ 0.9594
 			},
 			threshold: 0.96,
+			k:         0,
 			want:      []string{"a", "b"},
 			err:       nil,
 		},
@@ -78,6 +83,7 @@ func TestSimSearch(t *testing.T) {
 				"b": {7.0, 8.0, 9.0}, // sim ~ 0.9594
 			},
 			threshold: 0.99,
+			k:         0,
 			want:      []string{},
 			err:       nil,
 		},
@@ -89,6 +95,7 @@ func TestSimSearch(t *testing.T) {
 				"b": {1.0, 2.0, 3.0},    // sim ~ -0.9999
 			},
 			threshold: 0.5,
+			k:         0,
 			want:      []string{"a"},
 			err:       nil,
 		},
@@ -100,8 +107,9 @@ func TestSimSearch(t *testing.T) {
 				"b": {4.0, 5.0, 6.0},
 			},
 			threshold: 0.9,
+			k:         0,
 			want:      []string{},
-			err:       new(errEmptyVector),
+			err:       new(emptyVectorError),
 		},
 		{
 			name:     "empty candidate vector",
@@ -111,8 +119,55 @@ func TestSimSearch(t *testing.T) {
 				"b": {4.0, 5.0, 6.0},
 			},
 			threshold: 0.9,
+			k:         0,
 			want:      []string{},
-			err:       new(errEmptyVector),
+			err:       new(emptyVectorError),
+		},
+		{
+			name:       "empty candidates k > len(ids)",
+			queryVec:   []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{},
+			threshold:  0.5,
+			k:          1,
+			want:       []string{},
+			err:        nil,
+		},
+		{
+			name:     "exact match above threshold k > len(ids)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+			},
+			threshold: 0.99,
+			k:         2,
+			want:      []string{"a"},
+			err:       nil,
+		},
+		{
+			name:     "match above threshold k < len(ids)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+			},
+			threshold: 0.97,
+			k:         1,
+			want:      []string{"a"},
+			err:       nil,
+		},
+		{
+			name:     "partial match above threshold k < len(ids)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+				"c": {7.0, 8.0, 9.0}, // sim ~ 0.9594
+			},
+			threshold: 0.96,
+			k:         1,
+			want:      []string{"a"},
+			err:       nil,
 		},
 	}
 
@@ -120,7 +175,7 @@ func TestSimSearch(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := s.SimSearch(tc.queryVec, tc.candidates, tc.threshold)
+			got, err := s.Search(tc.queryVec, tc.candidates, tc.threshold, tc.k)
 			assert.IsType(t, tc.err, err)
 			assert.ElementsMatch(t, tc.want, got)
 		})
@@ -180,7 +235,7 @@ func TestCosineSim(t *testing.T) {
 			vecB:  []float64{2.0, 0.0, 3.6},
 			normB: 2.0,
 			want:  0.0,
-			err:   new(errVectorsNotSameLen),
+			err:   new(vectorsNotSameLenError),
 		},
 	}
 
@@ -202,7 +257,7 @@ func TestEuclideanNorm(t *testing.T) {
 		{[]float64{3.0, 4.0}, 5.0, nil},
 		{[]float64{0.0, 0.0, 0.0}, 0.0, nil},
 		{[]float64{1.0, 2.0, 3.0}, math.Sqrt(14.0), nil},
-		{[]float64{}, 0.0, new(errEmptyVector)},
+		{[]float64{}, 0.0, new(emptyVectorError)},
 	}
 
 	for _, tc := range testCases {
@@ -234,7 +289,7 @@ func TestDotProduct(t *testing.T) {
 			vecA:   []float64{1, 2},
 			vecB:   []float64{3, 4, 5},
 			result: 0,
-			err:    new(errVectorsNotSameLen),
+			err:    new(vectorsNotSameLenError),
 		},
 	}
 

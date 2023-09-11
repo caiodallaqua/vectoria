@@ -2,7 +2,6 @@ package simhash
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"math/rand"
 	"strings"
@@ -11,12 +10,6 @@ import (
 const (
 	POSITIVE_SIDE string = "1"
 	NEGATIVE_SIDE string = "0"
-)
-
-var (
-	errNumHyperPlanes    = errors.New("numHyperPlanes cannot be zero")
-	errSpaceDim          = errors.New("spaceDim cannot be zero")
-	errVectorsNotSameLen = errors.New("vectors must have the same length")
 )
 
 type Contract interface {
@@ -39,40 +32,42 @@ func New(numHyperPlanes, spaceDim uint32) (*SimHash, error) {
 	}, nil
 }
 
-func generateHyperplanes(numHyperPlanes, spaceDim uint32) ([][]float64, error) {
+func generateHyperplanes(numHyperPlanes, spaceDim uint32) (hyperPlanes [][]float64, err error) {
 	if numHyperPlanes == 0 {
-		logErr(errNumHyperPlanes, "generateHyperplanes")
-		return nil, errNumHyperPlanes
+		err = new(numHyperPlanesError)
+		logErr(err, "generateHyperplanes")
+		return nil, err
 	}
 
 	if spaceDim == 0 {
-		logErr(errSpaceDim, "generateHyperplanes")
-		return nil, errSpaceDim
+		err = new(spaceDimError)
+		logErr(err, "generateHyperplanes")
+		return nil, err
 	}
 
-	hyperplanes := make([][]float64, numHyperPlanes)
+	hyperPlanes = make([][]float64, numHyperPlanes)
 
 	for i := uint32(0); i < numHyperPlanes; i++ {
-		hyperplanes[i] = make([]float64, spaceDim)
+		hyperPlanes[i] = make([]float64, spaceDim)
 		for j := uint32(0); j < spaceDim; j++ {
-			hyperplanes[i][j] = rand.NormFloat64()
+			hyperPlanes[i][j] = rand.NormFloat64()
 		}
 	}
 
-	return hyperplanes, nil
+	return hyperPlanes, nil
 }
 
 func (sh *SimHash) Sketch(embedding []float64) (string, error) {
 	sk := make([]string, len(sh.Hyperplanes))
 
-	for idx, projectionVector := range sh.Hyperplanes {
+	for i, projectionVector := range sh.Hyperplanes {
 		res, err := hash(projectionVector, embedding)
 		if err != nil {
 			logErr(err, "Sketch")
 			return "", err
 		}
 
-		sk[idx] = res
+		sk[i] = res
 	}
 
 	return strings.Join(sk, ""), nil
@@ -92,12 +87,11 @@ func hash(projectionVector, embedding []float64) (string, error) {
 	return NEGATIVE_SIDE, nil
 }
 
-func dotProduct(vecA, vecB []float64) (float64, error) {
-	var res float64
-
+func dotProduct(vecA, vecB []float64) (res float64, err error) {
 	if len(vecA) != len(vecB) {
-		logErr(errVectorsNotSameLen, "dotProduct")
-		return 0, errVectorsNotSameLen
+		err = new(vectorsNotSameLenError)
+		logErr(err, "dotProduct")
+		return 0, err
 	}
 
 	for i := range vecA {
