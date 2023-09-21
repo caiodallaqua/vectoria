@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"errors"
 	"log/slog"
 	"maps"
 	"strings"
@@ -35,20 +34,15 @@ type LSH struct {
 	spaceDim       uint32
 }
 
-func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (*LSH, error) {
-	var (
-		sh  *simhash.SimHash
-		err error
-	)
+func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (l *LSH, err error) {
+	var sh *simhash.SimHash
 
-	if err = validateHyperParams(numRounds, numHyperPlanes, spaceDim); err != nil {
-		logErr(err, "New")
-		return nil, err
-	}
+	l = new(LSH)
+	l.setHyperParams(numRounds, numHyperPlanes, spaceDim)
 
-	hashes := make([]simhash.SimHash, numRounds)
-	for i := uint32(0); i < numRounds; i++ {
-		sh, err = simhash.New(numHyperPlanes, spaceDim)
+	hashes := make([]simhash.SimHash, l.numRounds)
+	for i := uint32(0); i < l.numRounds; i++ {
+		sh, err = simhash.New(l.numHyperPlanes, l.spaceDim)
 		if err != nil {
 			logErr(err, "New")
 			return nil, err
@@ -57,14 +51,11 @@ func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (*LSH,
 		hashes[i] = *sh
 	}
 
-	return &LSH{
-		hashes:         hashes,
-		kv:             kv,
-		sem:            semantic.New(),
-		numRounds:      numRounds,
-		numHyperPlanes: numHyperPlanes,
-		spaceDim:       spaceDim,
-	}, nil
+	l.hashes = hashes
+	l.kv = kv
+	l.sem = semantic.New()
+
+	return l, nil
 }
 
 func (l *LSH) Add(id string, embedding []float64) error {
@@ -98,7 +89,7 @@ func (l *LSH) Add(id string, embedding []float64) error {
 	return nil
 }
 
-func (l *LSH) GetNeighbors(queryVec []float64, threshold float64, k uint32) (neighbors []string, err error) {
+func (l *LSH) Get(queryVec []float64, threshold float64, k uint32) (neighbors []string, err error) {
 	if err = l.checkEmbedding(queryVec); err != nil {
 		logErr(err, "GetNeighbors")
 		return nil, err
@@ -213,7 +204,7 @@ func (l *LSH) prepareEmbedding(id string, embedding []float64) (data map[string]
 
 func (l *LSH) prepareSketches(id string, sks []string) (data map[string][]byte, err error) {
 	if len(id) == 0 {
-		err = &errInvalidIDLen{len(id)}
+		err = &invalidIDLenError{len(id)}
 		logErr(err, "prepareSketches")
 		return nil, err
 	}
@@ -236,7 +227,7 @@ func (l *LSH) checkEmbedding(embedding []float64) (err error) {
 	lenEmbedding := uint32(len(embedding))
 
 	if l.spaceDim != lenEmbedding {
-		err = &errEmbeddingLen{l.spaceDim, lenEmbedding}
+		err = &embeddingLenError{l.spaceDim, lenEmbedding}
 		logErr(err, "checkEmbedding")
 		return err
 	}
@@ -251,7 +242,7 @@ func (l *LSH) checkSketches(sks []string) (err error) {
 	)
 
 	if l.numRounds != lenSks {
-		err = &errInvalidNumSketches{l.numRounds, lenSks}
+		err = &invalidNumSketchesError{l.numRounds, lenSks}
 		logErr(err, "checkSketches")
 		return err
 	}
@@ -259,7 +250,7 @@ func (l *LSH) checkSketches(sks []string) (err error) {
 	for _, sk := range sks {
 		lenSk = uint32(len(sk))
 		if l.numHyperPlanes != lenSk {
-			err = &errInvalidSketchLen{l.numHyperPlanes, lenSk}
+			err = &invalidSketchLenError{l.numHyperPlanes, lenSk}
 			logErr(err, "checkSketches")
 			return err
 		}
@@ -322,25 +313,22 @@ func (l *LSH) getSketches(embedding []float64) ([]string, error) {
 	return sketches, nil
 }
 
-func validateHyperParams(numRounds, numHyperplanes, spaceDim uint32) (err error) {
-	if numRounds < MIN_NUM_ROUNDS || numRounds > MAX_NUM_ROUNDS {
-		err = errors.Join(new(errNumRounds), err)
+func (l *LSH) setHyperParams(numRounds, numHyperplanes, spaceDim uint32) {
+	if numRounds < MIN_NUM_ROUNDS {
+		numRounds = MIN_NUM_ROUNDS
 	}
 
 	if numHyperplanes < MIN_NUM_HYPERPLANES {
-		err = errors.Join(new(errNumHyperPlanes))
+		numHyperplanes = MIN_NUM_HYPERPLANES
 	}
 
-	if spaceDim < MIN_SPACE_DIM {
-		err = errors.Join(new(errSpaceDim), err)
+	if spaceDim < MIN_NUM_HYPERPLANES {
+		spaceDim = MIN_SPACE_DIM
 	}
 
-	if err != nil {
-		logErr(err, "validateHyperParams")
-		return err
-	}
-
-	return nil
+	l.numRounds = numRounds
+	l.numHyperPlanes = numHyperplanes
+	l.spaceDim = spaceDim
 }
 
 func logErr(err error, trace string) {

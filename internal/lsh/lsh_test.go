@@ -1,7 +1,6 @@
 package lsh
 
 import (
-	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -22,148 +21,212 @@ func TestMain(m *testing.M) {
 }
 
 func TestNew(t *testing.T) {
-	var (
-		numRounds      = MIN_NUM_ROUNDS
-		numHyperPlanes = MIN_NUM_HYPERPLANES
-		spaceDim       = MIN_SPACE_DIM
-	)
+	testCases := []struct {
+		name           string
+		numRounds      uint32
+		numHyperPlanes uint32
+		spaceDim       uint32
+		want           *LSH
+	}{
+		{
+			name:           "none missing", // min + 1 to show that it works wit non-default values
+			numRounds:      MIN_NUM_ROUNDS + 1,
+			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+			spaceDim:       MIN_SPACE_DIM + 1,
+			want: &LSH{
+				numRounds:      MIN_NUM_ROUNDS + 1,
+				numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+				spaceDim:       MIN_SPACE_DIM + 1,
+			},
+		},
+		{
+			name:           "all missing",
+			numRounds:      0,
+			numHyperPlanes: 0,
+			spaceDim:       0,
+			want: &LSH{
+				numRounds:      MIN_NUM_ROUNDS,
+				numHyperPlanes: MIN_NUM_HYPERPLANES,
+				spaceDim:       MIN_SPACE_DIM,
+			},
+		},
+		{
+			name:           "numRounds missing",
+			numRounds:      0,
+			numHyperPlanes: MIN_NUM_HYPERPLANES,
+			spaceDim:       MIN_SPACE_DIM,
+			want: &LSH{
+				numRounds:      MIN_NUM_ROUNDS,
+				numHyperPlanes: MIN_NUM_HYPERPLANES,
+				spaceDim:       MIN_SPACE_DIM,
+			},
+		},
+		{
+			name:           "numHyperPlanes missing",
+			numRounds:      MIN_NUM_ROUNDS,
+			numHyperPlanes: 0,
+			spaceDim:       MIN_SPACE_DIM,
+			want: &LSH{
+				numRounds:      MIN_NUM_ROUNDS,
+				numHyperPlanes: MIN_NUM_HYPERPLANES,
+				spaceDim:       MIN_SPACE_DIM,
+			},
+		},
+		{
+			name:           "spaceDim missing",
+			numRounds:      MIN_NUM_ROUNDS,
+			numHyperPlanes: MIN_NUM_HYPERPLANES,
+			spaceDim:       0,
+			want: &LSH{
+				numRounds:      MIN_NUM_ROUNDS,
+				numHyperPlanes: MIN_NUM_HYPERPLANES,
+				spaceDim:       MIN_SPACE_DIM,
+			},
+		},
+	}
 
 	kv, err := storage.New("")
 	assert.NoError(t, err)
 
-	l, err := New(kv, numRounds, numHyperPlanes, spaceDim)
-	assert.NoError(t, err)
-
-	assert.NotNil(t, l)
-	assert.NotNil(t, l.hashes)
-	assert.Equal(t, numRounds, uint32(len(l.hashes)))
-	for _, elem := range l.hashes {
-		assert.NotNil(t, elem.Hyperplanes)
-	}
-
-	assert.Equal(t, numRounds, l.numRounds)
-	assert.Equal(t, numHyperPlanes, l.numHyperPlanes)
-	assert.Equal(t, spaceDim, l.spaceDim)
-}
-
-func TestValidateHyperParams_NumRounds(t *testing.T) {
-	testCases := []struct {
-		name           string
-		numRounds      uint32
-		numHyperPlanes uint32
-		spaceDim       uint32
-		err            error
-	}{
-		{
-			name:           "lowerBound",
-			numRounds:      MIN_NUM_ROUNDS,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            nil,
-		},
-		{
-			name:           "lessThanMin",
-			numRounds:      MIN_NUM_ROUNDS - 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            new(errNumRounds),
-		},
-		{
-			name:           "upperBound",
-			numRounds:      MAX_NUM_ROUNDS,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            nil,
-		},
-		{
-			name:           "moreThanMax",
-			numRounds:      MAX_NUM_ROUNDS + 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            new(errNumRounds),
-		},
-	}
-
 	for _, tc := range testCases {
 		t.Run(
 			tc.name,
 			func(t *testing.T) {
-				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-				assert.True(t, errors.Is(err, tc.err))
+				l, err := New(kv, tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+				assert.NoError(t, err)
+
+				assert.Equal(t, tc.want.numRounds, l.numRounds)
+				assert.Equal(t, tc.want.numHyperPlanes, l.numHyperPlanes)
+				assert.Equal(t, tc.want.spaceDim, l.spaceDim)
+
+				assert.NotNil(t, l.hashes)
+				assert.Equal(t, tc.want.numRounds, uint32(len(l.hashes)))
+				for _, elem := range l.hashes {
+					assert.NotNil(t, elem.Hyperplanes)
+				}
 			},
 		)
 	}
 }
 
-func TestValidateHyperParams_NumHyperPlanes(t *testing.T) {
-	testCases := []struct {
-		name           string
-		numRounds      uint32
-		numHyperPlanes uint32
-		spaceDim       uint32
-		err            error
-	}{
-		{
-			name:           "lowerBound",
-			numRounds:      MIN_NUM_ROUNDS + 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            nil,
-		},
-		{
-			name:           "lessThanMin",
-			numRounds:      MIN_NUM_ROUNDS + 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES - 1,
-			spaceDim:       MIN_SPACE_DIM + 1,
-			err:            new(errNumHyperPlanes),
-		},
-	}
+// func TestValidateHyperParams_NumRounds(t *testing.T) {
+// 	testCases := []struct {
+// 		name           string
+// 		numRounds      uint32
+// 		numHyperPlanes uint32
+// 		spaceDim       uint32
+// 		err            error
+// 	}{
+// 		{
+// 			name:           "lowerBound",
+// 			numRounds:      MIN_NUM_ROUNDS,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            nil,
+// 		},
+// 		{
+// 			name:           "lessThanMin",
+// 			numRounds:      MIN_NUM_ROUNDS - 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            new(errNumRounds),
+// 		},
+// 		{
+// 			name:           "upperBound",
+// 			numRounds:      MAX_NUM_ROUNDS,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            nil,
+// 		},
+// 		{
+// 			name:           "moreThanMax",
+// 			numRounds:      MAX_NUM_ROUNDS + 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            new(errNumRounds),
+// 		},
+// 	}
 
-	for _, tc := range testCases {
-		t.Run(
-			tc.name,
-			func(t *testing.T) {
-				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-				assert.True(t, errors.Is(err, tc.err))
-			},
-		)
-	}
-}
+// 	for _, tc := range testCases {
+// 		t.Run(
+// 			tc.name,
+// 			func(t *testing.T) {
+// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+// 				assert.True(t, errors.Is(err, tc.err))
+// 			},
+// 		)
+// 	}
+// }
 
-func TestValidateHyperParams_SpaceDim(t *testing.T) {
-	testCases := []struct {
-		name           string
-		numRounds      uint32
-		numHyperPlanes uint32
-		spaceDim       uint32
-		err            error
-	}{
-		{
-			name:           "lowerBound",
-			numRounds:      MIN_NUM_ROUNDS + 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM,
-			err:            nil,
-		},
-		{
-			name:           "lessThanMin",
-			numRounds:      MIN_NUM_ROUNDS + 1,
-			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-			spaceDim:       MIN_SPACE_DIM - 1,
-			err:            new(errSpaceDim),
-		},
-	}
+// func TestValidateHyperParams_NumHyperPlanes(t *testing.T) {
+// 	testCases := []struct {
+// 		name           string
+// 		numRounds      uint32
+// 		numHyperPlanes uint32
+// 		spaceDim       uint32
+// 		err            error
+// 	}{
+// 		{
+// 			name:           "lowerBound",
+// 			numRounds:      MIN_NUM_ROUNDS + 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            nil,
+// 		},
+// 		{
+// 			name:           "lessThanMin",
+// 			numRounds:      MIN_NUM_ROUNDS + 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES - 1,
+// 			spaceDim:       MIN_SPACE_DIM + 1,
+// 			err:            new(errNumHyperPlanes),
+// 		},
+// 	}
 
-	for _, tc := range testCases {
-		t.Run(
-			tc.name,
-			func(t *testing.T) {
-				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-				assert.True(t, errors.Is(err, tc.err))
-			},
-		)
-	}
-}
+// 	for _, tc := range testCases {
+// 		t.Run(
+// 			tc.name,
+// 			func(t *testing.T) {
+// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+// 				assert.True(t, errors.Is(err, tc.err))
+// 			},
+// 		)
+// 	}
+// }
+
+// func TestValidateHyperParams_SpaceDim(t *testing.T) {
+// 	testCases := []struct {
+// 		name           string
+// 		numRounds      uint32
+// 		numHyperPlanes uint32
+// 		spaceDim       uint32
+// 		err            error
+// 	}{
+// 		{
+// 			name:           "lowerBound",
+// 			numRounds:      MIN_NUM_ROUNDS + 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM,
+// 			err:            nil,
+// 		},
+// 		{
+// 			name:           "lessThanMin",
+// 			numRounds:      MIN_NUM_ROUNDS + 1,
+// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
+// 			spaceDim:       MIN_SPACE_DIM - 1,
+// 			err:            new(errSpaceDim),
+// 		},
+// 	}
+
+// 	for _, tc := range testCases {
+// 		t.Run(
+// 			tc.name,
+// 			func(t *testing.T) {
+// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+// 				assert.True(t, errors.Is(err, tc.err))
+// 			},
+// 		)
+// 	}
+// }
 
 func TestSketches(t *testing.T) {
 	tc := struct {
@@ -310,28 +373,28 @@ func TestCheckSketches(t *testing.T) {
 			numRounds:      1,
 			numHyperPlanes: 3,
 			sks:            []string{"101", "111"},
-			err:            new(errInvalidNumSketches),
+			err:            new(invalidNumSketchesError),
 		},
 		{
 			name:           "numSketches_smallerThanNumRounds",
 			numRounds:      2,
 			numHyperPlanes: 3,
 			sks:            []string{"101"},
-			err:            new(errInvalidNumSketches),
+			err:            new(invalidNumSketchesError),
 		},
 		{
 			name:           "sketchLen_smallerThanNumHyperPlanes",
 			numRounds:      1,
 			numHyperPlanes: 3,
 			sks:            []string{"10"},
-			err:            new(errInvalidSketchLen),
+			err:            new(invalidSketchLenError),
 		},
 		{
 			name:           "sketchLen_greaterThanNumHyperPlanes",
 			numRounds:      1,
 			numHyperPlanes: 2,
 			sks:            []string{"101"},
-			err:            new(errInvalidSketchLen),
+			err:            new(invalidSketchLenError),
 		},
 	}
 
@@ -365,13 +428,13 @@ func TestCheckEmbedding(t *testing.T) {
 			name:      "embedLen_smallerThanSpaceDim",
 			spaceDim:  3,
 			embedding: []float64{1.2, 3.67},
-			err:       new(errEmbeddingLen),
+			err:       new(embeddingLenError),
 		},
 		{
 			name:      "embedLen_greaterThanSpaceDim",
 			spaceDim:  2,
 			embedding: []float64{1.2, 3.67, -8.44},
-			err:       new(errEmbeddingLen),
+			err:       new(embeddingLenError),
 		},
 	}
 
@@ -430,7 +493,7 @@ func TestGetNeighbors(t *testing.T) {
 			threshold:  0.8,
 			k:          0,
 			storedVecs: map[string][]float64{},
-			err:        new(errEmbeddingLen),
+			err:        new(embeddingLenError),
 			want:       nil,
 		},
 		{
@@ -440,7 +503,7 @@ func TestGetNeighbors(t *testing.T) {
 			threshold:  0.8,
 			k:          0,
 			storedVecs: map[string][]float64{},
-			err:        new(errEmbeddingLen),
+			err:        new(embeddingLenError),
 			want:       nil,
 		},
 		{
@@ -450,7 +513,7 @@ func TestGetNeighbors(t *testing.T) {
 			threshold:  0.8,
 			k:          0,
 			storedVecs: map[string][]float64{},
-			err:        new(errEmbeddingLen),
+			err:        new(embeddingLenError),
 			want:       nil,
 		},
 		{
@@ -525,7 +588,7 @@ func TestGetNeighbors(t *testing.T) {
 					assert.NoError(t, err)
 				}
 
-				got, err := l.GetNeighbors(tc.queryVec, tc.threshold, tc.k)
+				got, err := l.Get(tc.queryVec, tc.threshold, tc.k)
 				assert.IsType(t, tc.err, err)
 				assert.ElementsMatch(t, tc.want, got)
 			},
@@ -609,6 +672,7 @@ func setup(t *testing.T, opts Opts) *LSH {
 		opts.numRounds = MIN_NUM_ROUNDS
 	}
 
+	// TODO: Add seed or accept tolerable deviations when NumHyperPlanes > 1.
 	if opts.numHyperPlanes == 0 {
 		opts.numHyperPlanes = MIN_NUM_HYPERPLANES
 	}

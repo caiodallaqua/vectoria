@@ -8,11 +8,11 @@ import (
 )
 
 type Contract interface {
-	CloseDB() error
-	Add(data map[string][]byte) error
+	CloseDB() (err error)
+	Add(data map[string][]byte) (err error)
 	Get(key string) (val []byte, err error)
 	GetWithPrefix(prefix string) (values [][]byte, err error)
-	Del(keys ...string) error
+	Del(keys ...string) (err error)
 }
 
 type Storage struct {
@@ -38,8 +38,14 @@ func New(path string) (*Storage, error) {
 	}, nil
 }
 
-func (stg *Storage) CloseDB() error {
-	if err := stg.db.Close(); err != nil {
+func (s *Storage) CloseDB() (err error) {
+	if s == nil {
+		err = new(nilStorageReceiverError)
+		logErr(err, "CloseDB")
+		return err
+	}
+
+	if err := s.db.Close(); err != nil {
 		logErr(err, "CloseDB")
 		return err
 	}
@@ -47,8 +53,14 @@ func (stg *Storage) CloseDB() error {
 	return nil
 }
 
-func (stg *Storage) Add(data map[string][]byte) error {
-	err := stg.db.Update(func(txn *badger.Txn) (err error) {
+func (s *Storage) Add(data map[string][]byte) (err error) {
+	if s == nil {
+		err = new(nilStorageReceiverError)
+		logErr(err, "Add")
+		return err
+	}
+
+	err = s.db.Update(func(txn *badger.Txn) (err error) {
 		for key, val := range data {
 			if err = txn.Set([]byte(key), val); err != nil {
 				return err
@@ -64,8 +76,14 @@ func (stg *Storage) Add(data map[string][]byte) error {
 	return nil
 }
 
-func (stg *Storage) Get(key string) (val []byte, err error) {
-	err = stg.db.View(func(txn *badger.Txn) error {
+func (s *Storage) Get(key string) (val []byte, err error) {
+	if s == nil {
+		err = new(nilStorageReceiverError)
+		logErr(err, "Get")
+		return nil, err
+	}
+
+	err = s.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(key))
 		if err != nil {
 			return err
@@ -86,14 +104,20 @@ func (stg *Storage) Get(key string) (val []byte, err error) {
 	return val, nil
 }
 
-func (stg *Storage) GetWithPrefix(prefix string) (values [][]byte, err error) {
+func (s *Storage) GetWithPrefix(prefix string) (values [][]byte, err error) {
 	var (
 		val           []byte
 		item          *badger.Item
 		encodedPrefix = []byte(prefix)
 	)
 
-	err = stg.db.View(func(txn *badger.Txn) error {
+	if s == nil {
+		err = new(nilStorageReceiverError)
+		logErr(err, "GetWithPrefix")
+		return nil, err
+	}
+
+	err = s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
 		opts.PrefetchSize = 10
 
@@ -125,8 +149,14 @@ func (stg *Storage) GetWithPrefix(prefix string) (values [][]byte, err error) {
 	return values, nil
 }
 
-func (stg *Storage) Del(keys ...string) error {
-	err := stg.db.Update(func(txn *badger.Txn) (err error) {
+func (s *Storage) Del(keys ...string) (err error) {
+	if s == nil {
+		err = new(nilStorageReceiverError)
+		logErr(err, "Del")
+		return err
+	}
+
+	err = s.db.Update(func(txn *badger.Txn) (err error) {
 		for _, key := range keys {
 			if err = txn.Delete([]byte(key)); err != nil {
 				return err
@@ -142,11 +172,19 @@ func (stg *Storage) Del(keys ...string) error {
 	return nil
 }
 
+// To avoid panic when doing a bad init in high level packages.
+// Still a runtime catch, but easier to debug.
+type nilStorageReceiverError struct{}
+
+func (e *nilStorageReceiverError) Error() string {
+	return "storage receiver cannot be nil"
+}
+
 func logErr(err error, trace string) {
 	slog.LogAttrs(
 		context.TODO(),
 		slog.LevelError,
 		err.Error(),
-		slog.String("trace", "vectoria:src:internal:kv:"+trace),
+		slog.String("trace", "vectoria:src:internal:storage:"+trace),
 	)
 }

@@ -17,6 +17,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// TODO: Add tests for nil storage receivers
+
 func TestNew(t *testing.T) {
 	path := "/tmp/badger"
 	stg, err := New(path)
@@ -26,17 +28,17 @@ func TestNew(t *testing.T) {
 }
 
 func TestCloseDB(t *testing.T) {
-	stg, _ := setup(t)
+	stg := setup(t)
 
 	err := stg.CloseDB()
 	assert.NoError(t, err)
 	assert.True(t, stg.db.IsClosed())
 }
 
-func setup(t *testing.T) (*Storage, error) {
+func setup(t *testing.T) *Storage {
 	stg, err := New("")
 	assert.NoError(t, err)
 	assert.NotNil(t, stg)
 
-	return stg, err
+	return stg
 }
