@@ -11,14 +11,10 @@ import (
 )
 
 func TestRaceAdd(t *testing.T) {
-	var (
-		indexName string = "dumb"
-		spaceDim  uint32 = 3
-	)
+	var spaceDim uint32 = 3
 
 	db, err := New("", WithIndexLSH(&LSHConfig{
-		IndexName: indexName,
-		SpaceDim:  spaceDim,
+		SpaceDim: spaceDim,
 	}))
 	assert.NoError(t, err)
 
@@ -28,7 +24,7 @@ func TestRaceAdd(t *testing.T) {
 			gofakeit.Slice(&itemVec)
 			itemID := uuid.NewString()
 
-			err := db.Add(indexName, itemID, itemVec)
+			err := db.Add(itemID, itemVec)
 			assert.NoError(t, err)
 		}()
 	}

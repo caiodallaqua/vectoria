@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/mastrasec/vectoria/internal/lsh"
 	"github.com/mastrasec/vectoria/internal/storage"
+	"golang.org/x/exp/maps"
 )
 
 type DB struct {
@@ -143,22 +144,56 @@ func WithIndexLSH(confs ...*LSHConfig) Options {
 	}
 }
 
-func (db *DB) Add(indexName, itemID string, itemVec []float64) error {
-	idx, ok := db.indexRef.get(indexName)
-	if !ok {
-		return &indexDoesNotExistError{name: indexName}
-	}
-
-	return idx.add(itemID, itemVec)
+func (db *DB) Indexes() []string {
+	return maps.Keys(db.indexRef.items)
 }
 
-func (db *DB) Get(indexName string, queryVec []float64, threshold float64, k uint32) (ids []string, err error) {
-	idx, ok := db.indexRef.get(indexName)
-	if !ok {
-		return nil, &indexDoesNotExistError{name: indexName}
+// TODO: rollback on err
+func (db *DB) Add(itemID string, itemVec []float64, indexNames ...string) error {
+	if len(indexNames) == 0 {
+		indexNames = db.Indexes()
 	}
 
-	return idx.get(queryVec, threshold, k)
+	for _, indexName := range indexNames {
+		idx, ok := db.indexRef.get(indexName)
+		if !ok {
+			return &indexDoesNotExistError{name: indexName}
+		}
+
+		if err := idx.add(itemID, itemVec); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (db *DB) Get(queryVec []float64, threshold float64, k uint32, indexNames ...string) (res map[string][]string, err error) {
+	if len(indexNames) == 0 {
+		indexNames = db.Indexes()
+	}
+
+	res = make(map[string][]string, len(indexNames))
+
+	for _, indexName := range indexNames {
+		idx, ok := db.indexRef.get(indexName)
+		if !ok {
+			return nil, &indexDoesNotExistError{name: indexName}
+		}
+
+		ids, err := idx.get(queryVec, threshold, k)
+		if err != nil {
+			return nil, err
+		}
+
+		res[indexName] = ids
+	}
+
+	return res, nil
+}
+
+func (db *DB) clean(itemID string, indexNames ...string) {
+	// TODO: delete all
 }
 
 // =================================== INDEXES ===================================

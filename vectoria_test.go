@@ -1,11 +1,23 @@
 package vectoria
 
 import (
+	"io"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slog"
 )
+
+func TestMain(m *testing.M) {
+	// Overwrites the logger to keep tests outputs clean
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	slog.SetDefault(logger)
+
+	os.Exit(m.Run())
+}
 
 func TestNew(t *testing.T) {
 	testCases := []struct {
@@ -137,43 +149,73 @@ func TestWithIndexLSH(t *testing.T) {
 
 func TestAdd(t *testing.T) {
 	testCases := []struct {
-		name      string
-		opts      []Options
-		indexName string
-		itemID    string
-		itemVec   []float64
-		err       error
+		name       string
+		opts       []Options
+		indexNames []string
+		itemID     string
+		itemVec    []float64
+		err        error
 	}{
 		{
-			name:      "no options",
-			opts:      []Options{},
-			indexName: "dumb",
-			itemID:    uuid.NewString(),
-			itemVec:   []float64{},
-			err:       new(indexDoesNotExistError),
+			name:       "no options, all indexes",
+			opts:       []Options{},
+			indexNames: []string{},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{1, 2},
+			err:        nil,
 		},
 		{
-			name: "empty WithIndexLSH",
+			name:       "no options, wrong index",
+			opts:       []Options{},
+			indexNames: []string{"wrong-index-name"},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{},
+			err:        new(indexDoesNotExistError),
+		},
+		{
+			name: "empty WithIndexLSH, all indexes",
 			opts: []Options{
 				WithIndexLSH(),
 			},
-			indexName: "dumb",
-			itemID:    uuid.NewString(),
-			itemVec:   []float64{},
-			err:       new(indexDoesNotExistError),
+			indexNames: []string{},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{1, 2},
+			err:        nil,
 		},
 		{
-			name: "happy path",
+			name: "empty WithIndexLSH, wrong index",
+			opts: []Options{
+				WithIndexLSH(),
+			},
+			indexNames: []string{"wrong-index-name"},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{1, 2},
+			err:        new(indexDoesNotExistError),
+		},
+		{
+			name: "happy path, all indexes",
 			opts: []Options{
 				WithIndexLSH(&LSHConfig{
-					IndexName: "dumb",
+					SpaceDim: 3,
+				}),
+			},
+			indexNames: []string{},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{1, 2, 3},
+			err:        nil,
+		},
+		{
+			name: "happy path, specific index",
+			opts: []Options{
+				WithIndexLSH(&LSHConfig{
+					IndexName: "dumb-index-name",
 					SpaceDim:  3,
 				}),
 			},
-			indexName: "dumb",
-			itemID:    uuid.NewString(),
-			itemVec:   []float64{1, 2, 3},
-			err:       nil,
+			indexNames: []string{"dumb-index-name"},
+			itemID:     uuid.NewString(),
+			itemVec:    []float64{1, 2, 3},
+			err:        nil,
 		},
 	}
 
@@ -184,7 +226,7 @@ func TestAdd(t *testing.T) {
 				db, err := New("", tc.opts...)
 				assert.NoError(t, err)
 
-				err = db.Add(tc.indexName, tc.itemID, tc.itemVec)
+				err = db.Add(tc.itemID, tc.itemVec, tc.indexNames...)
 				assert.IsType(t, tc.err, err)
 			},
 		)
@@ -320,17 +362,19 @@ func TestGet_HappyPath(t *testing.T) {
 				db := setup(t, indexName, spaceDim)
 
 				for id, vec := range tc.candidates {
-					err := db.Add(indexName, id, vec)
+					err := db.Add(id, vec, indexName)
 					assert.NoError(t, err)
 				}
 
-				ids, err := db.Get(indexName, tc.queryVec, tc.threshold, tc.k)
+				ids, err := db.Get(tc.queryVec, tc.threshold, tc.k, indexName)
 				assert.NoError(t, err)
-				assert.ElementsMatch(t, tc.wantIDs, ids)
+				assert.ElementsMatch(t, tc.wantIDs, maps.Values(ids)[0])
 			},
 		)
 	}
 }
+
+// TODO: TestGet_HappyPath_MultiIndex
 
 // TODO: TestGet_Errors
 

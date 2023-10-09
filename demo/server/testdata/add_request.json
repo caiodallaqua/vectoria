@@ -1,0 +1,5 @@
+{
+    "index_name": "demo",
+    "item_id": "fake_item_id",
+    "item_vec": [1.0, 2.0, 3.0]
+}
