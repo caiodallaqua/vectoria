@@ -15,7 +15,6 @@ import (
 
 const (
 	MIN_NUM_ROUNDS uint32 = 1
-	MAX_NUM_ROUNDS uint32 = 100
 
 	MIN_NUM_HYPERPLANES uint32 = 1
 
@@ -90,30 +89,52 @@ func (l *LSH) Add(id string, embedding []float64) error {
 }
 
 func (l *LSH) Get(queryVec []float64, threshold float64, k uint32) (neighbors []string, err error) {
-	if err = l.checkEmbedding(queryVec); err != nil {
-		logErr(err, "GetNeighbors")
+	if err := l.checkGetParams(queryVec, threshold); err != nil {
+		logErr(err, "Get")
 		return nil, err
 	}
 
 	sks, err := l.getSketches(queryVec)
 	if err != nil {
-		logErr(err, "GetNeighbors")
+		logErr(err, "Get")
 		return nil, err
 	}
 
 	candidates, err := l.getEmbeddingsFromBuckets(sks)
 	if err != nil {
-		logErr(err, "GetNeighbors")
+		logErr(err, "Get")
 		return nil, err
 	}
 
 	neighbors, err = l.sem.Search(queryVec, candidates, threshold, k)
 	if err != nil {
-		logErr(err, "GetNeighbors")
+		logErr(err, "Get")
 		return nil, err
 	}
 
 	return neighbors, nil
+}
+
+func (l *LSH) checkGetParams(queryVec []float64, threshold float64) error {
+	if err := l.checkEmbedding(queryVec); err != nil {
+		logErr(err, "checkGetParams")
+		return err
+	}
+
+	if err := l.checkThreshold(threshold); err != nil {
+		logErr(err, "checkGetParams")
+		return err
+	}
+
+	return nil
+}
+
+func (l *LSH) Info() map[string]any {
+	return map[string]any{
+		"numRounds":      l.numRounds,
+		"numHyperPlanes": l.numHyperPlanes,
+		"spaceDim":       l.spaceDim,
+	}
 }
 
 func (l *LSH) getEmbeddingsFromBuckets(sks []string) (map[string][]float64, error) {
@@ -223,11 +244,11 @@ func (l *LSH) prepareSketches(id string, sks []string) (data map[string][]byte, 
 	return data, nil
 }
 
-func (l *LSH) checkEmbedding(embedding []float64) (err error) {
+func (l *LSH) checkEmbedding(embedding []float64) error {
 	lenEmbedding := uint32(len(embedding))
 
 	if l.spaceDim != lenEmbedding {
-		err = &embeddingLenError{l.spaceDim, lenEmbedding}
+		err := &embeddingLenError{l.spaceDim, lenEmbedding}
 		logErr(err, "checkEmbedding")
 		return err
 	}
@@ -235,10 +256,21 @@ func (l *LSH) checkEmbedding(embedding []float64) (err error) {
 	return nil
 }
 
-func (l *LSH) checkSketches(sks []string) (err error) {
+func (l *LSH) checkThreshold(threshold float64) error {
+	if threshold < 0 || threshold > 1 {
+		err := &invalidThresholdError{threshold}
+		logErr(err, "checkThreshold")
+		return err
+	}
+
+	return nil
+}
+
+func (l *LSH) checkSketches(sks []string) error {
 	var (
 		lenSk  uint32
 		lenSks = uint32(len(sks))
+		err    error
 	)
 
 	if l.numRounds != lenSks {

@@ -60,7 +60,7 @@ func TestSketch(t *testing.T) {
 		t.Run(fmt.Sprintf("sketch=\"%s\"", tc.sk), func(t *testing.T) {
 			l := setup(t, len(tc.hyperplanes), len(tc.embedding))
 
-			// overwrites random generated hyperplanes for testing
+			// Overwrites random generated hyperplanes for testing.
 			l.Hyperplanes = tc.hyperplanes
 
 			sk, err := l.Sketch(tc.embedding)

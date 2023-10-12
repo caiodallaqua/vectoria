@@ -20,7 +20,7 @@ func TestMain(m *testing.M) {
 // TODO: Add tests for nil storage receivers
 
 func TestNew(t *testing.T) {
-	path := "/tmp/badger"
+	path := t.TempDir()
 	stg, err := New(path)
 	assert.NoError(t, err)
 	assert.NotNil(t, stg)
@@ -36,7 +36,7 @@ func TestCloseDB(t *testing.T) {
 }
 
 func setup(t *testing.T) *Storage {
-	stg, err := New("")
+	stg, err := New(t.TempDir())
 	assert.NoError(t, err)
 	assert.NotNil(t, stg)
 

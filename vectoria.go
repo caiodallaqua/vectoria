@@ -130,12 +130,7 @@ func WithIndexLSH(confs ...*LSHConfig) Options {
 				return err
 			}
 
-			newIndex := &lshIndex{
-				numRounds:      conf.NumRounds,
-				numHyperPlanes: conf.NumHyperPlanes,
-				spaceDim:       conf.SpaceDim,
-				locality:       locality,
-			}
+			newIndex := &lshIndex{locality: locality}
 
 			db.indexRef.add(conf.IndexName, newIndex)
 		}
@@ -201,6 +196,7 @@ func (db *DB) clean(itemID string, indexNames ...string) {
 type index interface {
 	add(itemID string, itemVec []float64) error
 	get(queryVec []float64, threshold float64, k uint32) (ids []string, err error)
+	info() map[string]any
 }
 
 type LSHConfig struct {
@@ -221,10 +217,7 @@ type LSHConfig struct {
 }
 
 type lshIndex struct {
-	numRounds      uint32
-	numHyperPlanes uint32
-	spaceDim       uint32
-	locality       *lsh.LSH
+	locality *lsh.LSH
 }
 
 func (l *lshIndex) add(itemID string, itemVec []float64) error {
@@ -233,6 +226,10 @@ func (l *lshIndex) add(itemID string, itemVec []float64) error {
 
 func (l *lshIndex) get(queryVec []float64, threshold float64, k uint32) (ids []string, err error) {
 	return l.locality.Get(queryVec, threshold, k)
+}
+
+func (l *lshIndex) info() map[string]any {
+	return l.locality.Info()
 }
 
 // =================================== ERRORS ===================================

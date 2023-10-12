@@ -36,3 +36,11 @@ type embeddingLenError struct {
 func (e *embeddingLenError) Error() string {
 	return fmt.Sprintf("embedding length must match space dimension (expected: %v, got: %v)", e.expected, e.got)
 }
+
+type invalidThresholdError struct {
+	got float64
+}
+
+func (e *invalidThresholdError) Error() string {
+	return fmt.Sprintf("expected threshold to be between 0 and 1, but got: %v", e.got)
+}

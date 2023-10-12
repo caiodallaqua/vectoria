@@ -1,7 +1,11 @@
-name: Test
+name: Test Demo
 
 on:
-  workflow_call:
+  push:
+    branches: 
+      - main
+    paths: 
+       - demo/**
 
 jobs:
   test:
@@ -16,8 +20,8 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v3
         with:
-          go-version-file: go.mod
+          go-version-file: demo/server/go.mod
           cache: true
 
-      - name: Run Tests
-        run: go test ./... -shuffle=on -race
+      - name: Run Server Tests
+        run: go test ./demo/server/... -shuffle=on -race

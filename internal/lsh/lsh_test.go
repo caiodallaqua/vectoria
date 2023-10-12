@@ -3,6 +3,8 @@ package lsh
 import (
 	"io"
 	"log/slog"
+	"math"
+	"math/rand"
 	"os"
 	"testing"
 
@@ -13,9 +15,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Overwrites the logger to keep tests outputs clean
+	// Overwrites the logger to keep tests outputs clean.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	slog.SetDefault(logger)
+
+	// Allows for deterministic UUID generation.
+	uuid.SetRand(rand.New(rand.NewSource(42)))
 
 	os.Exit(m.Run())
 }
@@ -475,105 +480,224 @@ func TestEncodeFloat64Slice(t *testing.T) {
 	}
 }
 
-func TestGetNeighbors(t *testing.T) {
+func TestGetNeighbors_HappyPath(t *testing.T) {
+	var (
+		indexName      string = "dumb"
+		spaceDim       uint32 = 3
+		numHyperPlanes uint32 = 1
+		numRounds      uint32 = 10
+
+		numRuns           uint32  = 100
+		acceptedDeviation float64 = 0.1
+	)
+
 	testCases := []struct {
 		name       string
-		spaceDim   uint32
 		queryVec   []float64
+		candidates map[string][]float64
 		threshold  float64
 		k          uint32
-		storedVecs map[string][]float64
-		err        error
-		want       []string
+		wantIDs    []string
 	}{
 		{
-			name:       "empty queryVec with no storedVecs",
-			spaceDim:   2,
-			queryVec:   []float64{},
-			threshold:  0.8,
-			k:          0,
-			storedVecs: map[string][]float64{},
-			err:        new(embeddingLenError),
-			want:       nil,
-		},
-		{
-			name:       "queryVec length smaller than spaceDim with no storedVecs",
-			spaceDim:   2,
-			queryVec:   []float64{1.0},
-			threshold:  0.8,
-			k:          0,
-			storedVecs: map[string][]float64{},
-			err:        new(embeddingLenError),
-			want:       nil,
-		},
-		{
-			name:       "queryVec length greater than spaceDim with no storedVecs",
-			spaceDim:   2,
+			name:       "empty candidates",
 			queryVec:   []float64{1.0, 2.0, 3.0},
-			threshold:  0.8,
+			candidates: map[string][]float64{},
+			threshold:  0.5,
 			k:          0,
-			storedVecs: map[string][]float64{},
-			err:        new(embeddingLenError),
-			want:       nil,
+			wantIDs:    []string{},
 		},
 		{
-			name:       "queryVec length matches spaceDim with no storedVecs",
-			spaceDim:   2,
-			queryVec:   []float64{1.0, 2.0},
-			threshold:  0.8,
-			k:          0,
-			storedVecs: map[string][]float64{},
-			err:        nil,
-			want:       []string{},
-		},
-		{
-			name:       "exact match above threshold",
-			spaceDim:   2,
-			queryVec:   []float64{1.0, 2.0},
-			threshold:  0.8,
-			k:          0,
-			storedVecs: map[string][]float64{"a": {1.0, 2.0}},
-			err:        nil,
-			want:       []string{"a"},
-		},
-		{
-			name:      "match above threshold",
-			spaceDim:  2,
-			queryVec:  []float64{1.0, 2.0},
-			threshold: 0.98,
-			k:         0,
-			storedVecs: map[string][]float64{
-				"a": {1.0, 2.0}, // sim ~ 0.9999
-				"b": {3.0, 4.0}, // sim ~ 0.9838
+			name:     "exact match above threshold",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
 			},
-			err:  nil,
-			want: []string{"a", "b"},
-		},
-		{
-			name:      "partial match above threshold",
-			spaceDim:  2,
-			queryVec:  []float64{1.0, 2.0},
 			threshold: 0.99,
 			k:         0,
-			storedVecs: map[string][]float64{
-				"a": {1.0, 2.0}, // sim ~ 0.9999
-				"b": {3.0, 4.0}, // sim ~ 0.9838
-			},
-			err:  nil,
-			want: []string{"a"},
+			wantIDs:   []string{"a"},
 		},
 		{
-			name:      "no match above threshold",
-			spaceDim:  2,
-			queryVec:  []float64{1.0, 2.0},
+			name:     "match above threshold",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+			},
+			threshold: 0.97,
+			k:         0,
+			wantIDs:   []string{"a", "b"},
+		},
+		{
+			name:     "partial match above threshold",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+				"c": {7.0, 8.0, 9.0}, // sim ~ 0.9594
+			},
+			threshold: 0.96,
+			k:         0,
+			wantIDs:   []string{"a", "b"},
+		},
+		{
+			name:     "no match above threshold",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+				"b": {7.0, 8.0, 9.0}, // sim ~ 0.9594
+			},
 			threshold: 0.99,
 			k:         0,
-			storedVecs: map[string][]float64{
-				"a": {3.0, 4.0}, // sim ~ 0.9838
-				"b": {5.0, 6.0}, // sim ~ 0.9734
+			wantIDs:   []string{},
+		},
+		{
+			name:     "query vector with negative values",
+			queryVec: []float64{-1.0, -2.0, -3.0},
+			candidates: map[string][]float64{
+				"a": {-1.0, -2.0, -3.0}, // sim ~ 0.9999
+				"b": {1.0, 2.0, 3.0},    // sim ~ -0.9999
 			},
-			err:  nil,
-			want: []string{},
+			threshold: 0.5,
+			k:         0,
+			wantIDs:   []string{"a"},
+		},
+		{
+			name:       "empty candidates k > len(wantIDs)",
+			queryVec:   []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{},
+			threshold:  0.5,
+			k:          1,
+			wantIDs:    []string{},
+		},
+		{
+			name:     "exact match above threshold k > len(wantIDs)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+			},
+			threshold: 0.99,
+			k:         2,
+			wantIDs:   []string{"a"},
+		},
+		{
+			name:     "match above threshold k < len(wantIDs)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+			},
+			threshold: 0.97,
+			k:         1,
+			wantIDs:   []string{"a"},
+		},
+		{
+			name:     "partial match above threshold k < len(wantIDs)",
+			queryVec: []float64{1.0, 2.0, 3.0},
+			candidates: map[string][]float64{
+				"a": {1.0, 2.0, 3.0}, // sim ~ 0.9999
+				"b": {4.0, 5.0, 6.0}, // sim ~ 0.9746
+				"c": {7.0, 8.0, 9.0}, // sim ~ 0.9594
+			},
+			threshold: 0.96,
+			k:         1,
+			wantIDs:   []string{"a"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(
+			tc.name,
+			func(t *testing.T) {
+				probMap := probByCandidate(t, indexName, tc.queryVec, tc.candidates, numHyperPlanes, numRounds)
+				countMap := make(map[string]uint32, len(tc.candidates))
+
+				for i := uint32(0); i < numRuns; i++ {
+					l := setup(t, Opts{
+						numHyperPlanes: numHyperPlanes,
+						numRounds:      numRounds,
+						spaceDim:       spaceDim,
+					})
+
+					for id, vec := range tc.candidates {
+						err := l.Add(id, vec)
+						assert.NoError(t, err)
+					}
+
+					ids, err := l.Get(tc.queryVec, tc.threshold, tc.k)
+					assert.NoError(t, err)
+
+					for _, id := range ids {
+						countMap[id] += 1
+
+						// False positives should not be returned since we remove them by measuring similarity directly.
+						assert.Contains(t, tc.wantIDs, id)
+					}
+				}
+
+				for id, count := range countMap {
+					got := float64(count) / float64(numRuns)
+					deviation := math.Abs(got - probMap[id])
+
+					if got < probMap[id] && deviation > acceptedDeviation {
+						t.Errorf("observed: %0.5f, expected: %0.5f, deviation: %0.5f", got, probMap[id], deviation)
+					}
+				}
+			},
+		)
+	}
+}
+
+func TestGetNeighbors_Errors(t *testing.T) {
+	testCases := []struct {
+		name      string
+		spaceDim  uint32
+		queryVec  []float64
+		threshold float64
+		k         uint32
+		err       error
+	}{
+		{
+			name:      "empty queryVec",
+			spaceDim:  2,
+			queryVec:  []float64{},
+			threshold: 0.8,
+			k:         0,
+			err:       &embeddingLenError{},
+		},
+		{
+			name:      "queryVec length smaller than spaceDim",
+			spaceDim:  2,
+			queryVec:  []float64{1.0},
+			threshold: 0.8,
+			k:         0,
+			err:       &embeddingLenError{},
+		},
+		{
+			name:      "queryVec length greater than spaceDim",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0, 3.0},
+			threshold: 0.8,
+			k:         0,
+			err:       &embeddingLenError{},
+		},
+		{
+			name:      "threshold greater than one",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0},
+			threshold: 1.1,
+			k:         0,
+			err:       &invalidThresholdError{},
+		},
+		{
+			name:      "threshold smaller than zero",
+			spaceDim:  2,
+			queryVec:  []float64{1.0, 2.0},
+			threshold: -0.1,
+			k:         0,
+			err:       &invalidThresholdError{},
 		},
 	}
 
@@ -583,14 +707,8 @@ func TestGetNeighbors(t *testing.T) {
 			func(t *testing.T) {
 				l := setup(t, Opts{spaceDim: tc.spaceDim})
 
-				for k, v := range tc.storedVecs {
-					err := l.Add(k, v)
-					assert.NoError(t, err)
-				}
-
-				got, err := l.Get(tc.queryVec, tc.threshold, tc.k)
+				_, err := l.Get(tc.queryVec, tc.threshold, tc.k)
 				assert.IsType(t, tc.err, err)
-				assert.ElementsMatch(t, tc.want, got)
 			},
 		)
 	}
@@ -689,4 +807,65 @@ func setup(t *testing.T, opts Opts) *LSH {
 	assert.NotNil(t, l)
 
 	return l
+}
+
+func probByCandidate(
+	t *testing.T,
+	indexName string,
+	queryVec []float64,
+	candidates map[string][]float64,
+	numHyperPlanes,
+	numRounds uint32,
+) map[string]float64 {
+	probMap := make(map[string]float64, len(candidates))
+
+	for id, vec := range candidates {
+		prob := probSimilar(t, queryVec, vec, numHyperPlanes, numRounds)
+		probMap[id] = prob
+	}
+
+	return probMap
+}
+
+func probSimilar(t *testing.T, vecA, vecB []float64, numHyperPlanes, numRounds uint32) float64 {
+	theta := angleBetween(t, vecA, vecB)
+
+	// probability of both vectors being mapped to the same bucket in each projection / hyperplane
+	p := 1 - theta/math.Pi
+
+	// probability of both vectors being considered similar to each other by the LSH algorithm
+	return 1 - math.Pow(1-math.Pow(p, float64(numHyperPlanes)), float64(numRounds))
+}
+
+func angleBetween(t *testing.T, vecA, vecB []float64) float64 {
+	if len(vecA) != len(vecB) {
+		t.Fatalf("to compute angle between, vectors must have same len")
+	}
+
+	normA := vecNorm(vecA)
+	normB := vecNorm(vecB)
+
+	if normA*normB == 0 {
+		t.Fatalf("norm cannot be zero")
+	}
+
+	return math.Acos(dotProduct(vecA, vecB) / (normA * normB))
+}
+
+func dotProduct(vecA, vecB []float64) float64 {
+	dotProd := 0.0
+	for i := 0; i < len(vecA); i++ {
+		dotProd += vecA[i] * vecB[i]
+	}
+
+	return dotProd
+}
+
+func vecNorm(vec []float64) float64 {
+	norm := 0.0
+	for _, component := range vec {
+		norm += component * component
+	}
+
+	return math.Sqrt(norm)
 }
