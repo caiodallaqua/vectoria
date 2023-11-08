@@ -2,8 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -153,9 +157,52 @@ func (entry *entrypoint) listen() error {
 	return entry.app.Listen(entry.addr)
 }
 
+func getDataset(url string) (dest string, err error) {
+	tokens := strings.Split(url, "/")
+	filename := tokens[len(tokens)-1]
+	destPath := filename
+
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Println("Error making the GET request:", err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("bad status code: %d", resp.StatusCode)
+		log.Println(err)
+		return "", err
+	}
+
+	outFile, err := os.Create(destPath)
+	if err != nil {
+		log.Println("Error creating the destination file:", err)
+		return "", err
+	}
+	defer outFile.Close()
+
+	if _, err = io.Copy(outFile, resp.Body); err != nil {
+		log.Println("Error copying the file:", err)
+		return "", err
+	}
+
+	return destPath, nil
+}
+
 func main() {
 	path := ""
 	addr := "127.0.0.1:8558"
+	remoteDatasetPath := "https://github.com/mastrasec/vectoria/releases/download/demo_dataset/sbu_captions_embeddings.parquet"
+
+	datasetPath, err := getDataset(remoteDatasetPath)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	// TODO: Read parquet.
+	log.Println(datasetPath)
 
 	entry, err := newEntrypoint(addr, path, true,
 		vectoria.WithIndexLSH(&vectoria.LSHConfig{

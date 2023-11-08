@@ -1,6 +1,6 @@
 module github.com/mastrasec/vectoria
 
-go 1.21.1
+go 1.21.3
 
 require (
 	github.com/brianvoe/gofakeit/v6 v6.23.2

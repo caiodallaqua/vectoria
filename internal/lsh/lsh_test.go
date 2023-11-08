@@ -4,7 +4,6 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"math/rand"
 	"os"
 	"testing"
 
@@ -18,9 +17,6 @@ func TestMain(m *testing.M) {
 	// Overwrites the logger to keep tests outputs clean.
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	slog.SetDefault(logger)
-
-	// Allows for deterministic UUID generation.
-	uuid.SetRand(rand.New(rand.NewSource(42)))
 
 	os.Exit(m.Run())
 }
@@ -482,7 +478,6 @@ func TestEncodeFloat64Slice(t *testing.T) {
 
 func TestGetNeighbors_HappyPath(t *testing.T) {
 	var (
-		indexName      string = "dumb"
 		spaceDim       uint32 = 3
 		numHyperPlanes uint32 = 1
 		numRounds      uint32 = 10
@@ -611,7 +606,7 @@ func TestGetNeighbors_HappyPath(t *testing.T) {
 		t.Run(
 			tc.name,
 			func(t *testing.T) {
-				probMap := probByCandidate(t, indexName, tc.queryVec, tc.candidates, numHyperPlanes, numRounds)
+				probMap := probByCandidate(t, tc.queryVec, tc.candidates, numHyperPlanes, numRounds)
 				countMap := make(map[string]uint32, len(tc.candidates))
 
 				for i := uint32(0); i < numRuns; i++ {
@@ -811,7 +806,6 @@ func setup(t *testing.T, opts Opts) *LSH {
 
 func probByCandidate(
 	t *testing.T,
-	indexName string,
 	queryVec []float64,
 	candidates map[string][]float64,
 	numHyperPlanes,

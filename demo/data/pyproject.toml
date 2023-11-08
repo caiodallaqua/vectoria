@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "vectoria-demo-data"
+version = "0.0.0"
+description = ""
+authors = [""]
+readme = "README.md"
+packages = [{include = "vectoria_demo_data"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+datasets = "^2.14.6"
+sentence-transformers = "^2.2.2"
+torch = {version = "^2.1.0+cpu", source = "torch_cpu"}
+
+[[tool.poetry.source]]
+name = "torch_cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
