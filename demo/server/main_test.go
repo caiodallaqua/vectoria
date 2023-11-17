@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -66,7 +67,9 @@ func TestRegisterRoutes(t *testing.T) {
 		},
 	}
 
-	entry, err := newEntrypoint(gofakeit.URL(), "", false)
+	logger := slog.New(slog.NewTextHandler(nil, nil))
+
+	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false)
 	assert.NoError(t, err)
 
 	entry.registerRoutes()
@@ -83,7 +86,9 @@ func TestRegisterRoutes(t *testing.T) {
 }
 
 func TestAdd(t *testing.T) {
-	entry, err := newEntrypoint(gofakeit.URL(), "", false,
+	logger := slog.New(slog.NewTextHandler(nil, nil))
+
+	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false,
 		vectoria.WithIndexLSH(&vectoria.LSHConfig{
 			IndexName:      "demo",
 			NumRounds:      10,
@@ -108,7 +113,9 @@ func TestAdd(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	entry, err := newEntrypoint(gofakeit.URL(), "", false,
+	logger := slog.New(slog.NewTextHandler(nil, nil))
+
+	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false,
 		vectoria.WithIndexLSH(&vectoria.LSHConfig{
 			IndexName:      "demo",
 			NumRounds:      10,

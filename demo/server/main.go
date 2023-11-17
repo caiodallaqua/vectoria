@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -68,17 +69,23 @@ type newReq struct {
 
 type newRes struct{}
 
-func newEntrypoint(addr, path string, shouldLog bool, opts ...vectoria.Options) (*entrypoint, error) {
+func newEntrypoint(logger *slog.Logger, addr, path string, shouldLogDB bool, opts ...vectoria.Options) (*entrypoint, error) {
+	if logger == nil {
+		return nil, errors.New("logger cannot be nil")
+	}
+
 	db, err := vectoria.New(path, opts...)
 	if err != nil {
+		logger.Error("unable to create database", "function", "newEntrypoint", "error", err)
 		return nil, err
 	}
 
 	return &entrypoint{
-		addr: addr,
-		path: path,
-		app:  newApp(shouldLog),
-		db:   db,
+		addr:   addr,
+		path:   path,
+		app:    newApp(shouldLogDB),
+		db:     db,
+		logger: logger,
 	}, nil
 }
 
@@ -306,7 +313,7 @@ func main() {
 	)
 
 	logger.Info("launching vector database")
-	entry, err := newEntrypoint(addr, path, true,
+	entry, err := newEntrypoint(logger, addr, path, true,
 		vectoria.WithIndexLSH(&vectoria.LSHConfig{
 			IndexName:      "demo",
 			NumRounds:      10,
