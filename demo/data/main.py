@@ -31,9 +31,10 @@ if __name__ == "__main__":
     df = load_dataset('sbu_captions', split='train').to_pandas().sample(n=num_images, random_state=42)
 
     with ThreadPoolExecutor(max_workers=4*multiprocessing.cpu_count()) as executor:
-        df['status_200'] = list(executor.map(valid_url, df['image_url']))
+        df['status_ok'] = list(executor.map(valid_url, df['image_url']))
         df['valid_sequence_len'] = list(executor.map(valid_sequence_len, df['caption']))
 
-    filtered_df = df[df['status_200'] & df['valid_sequence_len']]
+    filtered_df = df[df['status_ok'] & df['valid_sequence_len']]
+
     final_df = get_embeddings(filtered_df[['image_url', 'caption']])
     final_df.to_parquet('sbu_captions_embeddings.parquet', engine='pyarrow', compression='snappy', index=False)

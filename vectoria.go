@@ -200,20 +200,20 @@ type index interface {
 }
 
 type LSHConfig struct {
-	IndexName string
+	IndexName string `json:"index_name"`
 
 	// Number of rounds. More rounds improve quality, but also adds computation overhead.
 	// It must be at least 1.
 	// If invalid value is given, default value is used.
-	NumRounds uint32
+	NumRounds uint32 `json:"num_rounds"`
 
 	// Number of hyperplanes to split the space on. It must be at least 1.
 	// If invalid value is given, default value is used.
-	NumHyperPlanes uint32
+	NumHyperPlanes uint32 `json:"num_hyper_planes"`
 
 	// Dimension of the space (vector length). It must be at least 2.
 	// If invalid value is given, default value is used.
-	SpaceDim uint32
+	SpaceDim uint32 `json:"space_dim"`
 }
 
 type lshIndex struct {

@@ -119,7 +119,7 @@ func (s *Storage) GetWithPrefix(prefix string) (values [][]byte, err error) {
 
 	err = s.db.View(func(txn *badger.Txn) error {
 		opts := badger.DefaultIteratorOptions
-		opts.PrefetchSize = 10
+		opts.PrefetchSize = 128
 
 		it := txn.NewIterator(opts)
 		defer it.Close()

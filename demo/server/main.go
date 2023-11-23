@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mastrasec/vectoria"
@@ -98,6 +98,7 @@ func newApp(shouldLog bool) *fiber.App {
 	})
 
 	app.Use(recover.New())
+	app.Use(cors.New())
 
 	if shouldLog {
 		app.Use(logger.New())
@@ -112,7 +113,7 @@ func (entry *entrypoint) registerRoutes() {
 
 	entry.app.Post("/new", entry.new).
 		Post("/add", entry.add).
-		Get("/get", entry.get)
+		Post("/get", entry.get)
 }
 
 func (entry *entrypoint) health(ctx *fiber.Ctx) error {
@@ -125,7 +126,6 @@ func (entry *entrypoint) add(ctx *fiber.Ctx) error {
 	payload := &addReq{}
 
 	if err := ctx.BodyParser(payload); err != nil {
-		log.Println(err)
 		logDebug.Error("unable to parse payload data", "error", err.Error())
 		return ctx.Status(http.StatusBadRequest).SendString("{}")
 	}
@@ -160,7 +160,7 @@ func (entry *entrypoint) get(ctx *fiber.Ctx) error {
 func (entry *entrypoint) new(ctx *fiber.Ctx) error {
 	logDebug := entry.logger.With("function", "new")
 
-	payload := newReq{}
+	payload := &newReq{}
 
 	if err := ctx.BodyParser(payload); err != nil {
 		logDebug.Error("unable to parse payload data", "error", err.Error())
@@ -308,7 +308,7 @@ func main() {
 	var (
 		path              string = ""
 		addr              string = "127.0.0.1:8558"
-		remoteDatasetPath string = "https://github.com/mastrasec/vectoria/releases/download/demo_dataset/sbu_captions_embeddings.parquet"
+		remoteDatasetPath string = "https://github.com/mastrasec/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
 		embeddingLen      uint32 = 384
 	)
 
@@ -316,8 +316,8 @@ func main() {
 	entry, err := newEntrypoint(logger, addr, path, true,
 		vectoria.WithIndexLSH(&vectoria.LSHConfig{
 			IndexName:      "demo",
-			NumRounds:      10,
-			NumHyperPlanes: 100,
+			NumRounds:      50,
+			NumHyperPlanes: 20,
 			SpaceDim:       embeddingLen,
 		}),
 	)
