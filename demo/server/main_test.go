@@ -129,7 +129,7 @@ func TestGet(t *testing.T) {
 
 	apitest.New().
 		HandlerFunc(FiberToHandlerFunc(entry.app)).
-		Get("/get").
+		Post("/get").
 		Header("Content-Type", "application/json").
 		Body(getRequestBody).
 		Expect(t).
