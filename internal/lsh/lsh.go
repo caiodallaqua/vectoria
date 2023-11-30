@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"maps"
-	"strings"
 
 	"github.com/mastrasec/vectoria/internal/semantic"
 	"github.com/mastrasec/vectoria/internal/simhash"
@@ -24,19 +23,38 @@ const (
 )
 
 type LSH struct {
-	hashes []simhash.SimHash
-	kv     storage.Contract
-	sem    semantic.Contract
+	indexName string
+	hashes    []simhash.SimHash
+	kv        storage.Contract
+	sem       semantic.Contract
 
 	numRounds      uint32
 	numHyperPlanes uint32
 	spaceDim       uint32
 }
 
-func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (l *LSH, err error) {
+func New(indexName string, kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (l *LSH, err error) {
 	var sh *simhash.SimHash
 
-	l = new(LSH)
+	l = &LSH{
+		indexName: indexName,
+		kv:        kv,
+		sem:       semantic.New(),
+	}
+
+	exists, err := l.indexExists()
+	if err != nil {
+		return nil, err
+	}
+
+	if exists {
+		if err := l.getStoredConfig(); err != nil {
+			return nil, err
+		}
+
+		return l, nil
+	}
+
 	l.setHyperParams(numRounds, numHyperPlanes, spaceDim)
 
 	hashes := make([]simhash.SimHash, l.numRounds)
@@ -51,10 +69,88 @@ func New(kv storage.Contract, numRounds, numHyperPlanes, spaceDim uint32) (l *LS
 	}
 
 	l.hashes = hashes
-	l.kv = kv
-	l.sem = semantic.New()
+
+	if err := l.storeConfig(); err != nil {
+		return nil, err
+	}
 
 	return l, nil
+}
+
+func (l *LSH) indexExists() (exists bool, err error) {
+	exists, err = l.kv.KeyExists(getIndexKey(l.indexName))
+	if err != nil {
+		return false, err
+	}
+
+	return exists, nil
+}
+
+func (l *LSH) storeConfig() (err error) {
+	var data = make(map[string][]byte, 4+len(l.hashes))
+
+	data = map[string][]byte{
+		getIndexKey(l.indexName):          []byte(""),
+		getNumRoundsKey(l.indexName):      encodeUInt32(l.numRounds),
+		getNumHyperPlanesKey(l.indexName): encodeUInt32(l.numHyperPlanes),
+		getSpaceDimKey(l.indexName):       encodeUInt32(l.spaceDim),
+	}
+
+	for i, hash := range l.hashes {
+		hyperplanes, err := encodeFloat64Slice2D(hash.Hyperplanes)
+		if err != nil {
+			return err
+		}
+		data[getHyperPlanesKey(l.indexName, i)] = hyperplanes
+	}
+
+	if err := l.kv.Add(data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *LSH) getStoredConfig() error {
+	numRoundsKey := getNumRoundsKey(l.indexName)
+	encodedNumRounds, err := l.kv.Get(numRoundsKey)
+	if err != nil {
+		return err
+	}
+
+	numHyperPlanesKey := getNumHyperPlanesKey(l.indexName)
+	encodedNumHyperPlanes, err := l.kv.Get(numHyperPlanesKey)
+	if err != nil {
+		return err
+	}
+
+	spaceDimKey := getSpaceDimKey(l.indexName)
+	encodedSpaceDim, err := l.kv.Get(spaceDimKey)
+	if err != nil {
+		return err
+	}
+
+	l.numHyperPlanes = binary.LittleEndian.Uint32(encodedNumHyperPlanes)
+	l.numRounds = binary.LittleEndian.Uint32(encodedNumRounds)
+	l.spaceDim = binary.LittleEndian.Uint32(encodedSpaceDim)
+
+	l.hashes = make([]simhash.SimHash, l.numRounds)
+
+	for i := 0; i < int(l.numRounds); i++ {
+		encodedHyperPlanes, err := l.kv.Get(getHyperPlanesKey(l.indexName, i))
+		if err != nil {
+			return err
+		}
+
+		hyperPlanes, err := decodeFloat64Slice2D(encodedHyperPlanes, l.spaceDim)
+		if err != nil {
+			return err
+		}
+
+		l.hashes[i].Hyperplanes = hyperPlanes
+	}
+
+	return nil
 }
 
 func (l *LSH) Add(id string, embedding []float64) error {
@@ -170,7 +266,7 @@ func (l *LSH) getEmbeddingsFromBuckets(sks []string) (map[string][]float64, erro
 }
 
 func (l *LSH) getBucketIDs(sk string) ([]string, error) {
-	encodedIDs, err := l.kv.GetWithPrefix(sk)
+	encodedIDs, err := l.kv.GetWithPrefix(getSketchPrefixKey(l.indexName, sk))
 	if err != nil {
 		logErr(err, "getBucketIDs")
 		return nil, err
@@ -186,7 +282,7 @@ func (l *LSH) getBucketIDs(sk string) ([]string, error) {
 }
 
 func (l *LSH) getEmbedding(id string) ([]float64, error) {
-	encodedEmbed, err := l.kv.Get(key("embedding", id))
+	encodedEmbed, err := l.kv.Get(getEmbeddingKey(l.indexName, id))
 	if err != nil {
 		logErr(err, "getEmbedding")
 		return nil, err
@@ -199,10 +295,6 @@ func (l *LSH) getEmbedding(id string) ([]float64, error) {
 	}
 
 	return embed, nil
-}
-
-func key(elems ...string) string {
-	return strings.Join(elems, "/")
 }
 
 func (l *LSH) prepareEmbedding(id string, embedding []float64) (data map[string][]byte, err error) {
@@ -218,7 +310,7 @@ func (l *LSH) prepareEmbedding(id string, embedding []float64) (data map[string]
 	}
 
 	data = make(map[string][]byte, 1)
-	data[key("embedding", id)] = encodedEmbed
+	data[getEmbeddingKey(l.indexName, id)] = encodedEmbed
 
 	return data, nil
 }
@@ -238,7 +330,7 @@ func (l *LSH) prepareSketches(id string, sks []string) (data map[string][]byte, 
 	data = make(map[string][]byte, len(sks))
 
 	for _, sk := range sks {
-		data[key(sk, id)] = []byte(id)
+		data[getSketchKey(l.indexName, sk, id)] = []byte(id)
 	}
 
 	return data, nil
@@ -291,6 +383,13 @@ func (l *LSH) checkSketches(sks []string) error {
 	return nil
 }
 
+func encodeUInt32(val uint32) []byte {
+	data := make([]byte, 4)
+	binary.LittleEndian.PutUint32(data, val)
+
+	return data
+}
+
 func encodeFloat64Slice(slice []float64) ([]byte, error) {
 	var err error
 	buf := new(bytes.Buffer)
@@ -299,6 +398,22 @@ func encodeFloat64Slice(slice []float64) ([]byte, error) {
 		if err = binary.Write(buf, binary.LittleEndian, val); err != nil {
 			logErr(err, "encodeFloat64Slice")
 			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func encodeFloat64Slice2D(slice [][]float64) ([]byte, error) {
+	var err error
+	buf := new(bytes.Buffer)
+
+	for _, row := range slice {
+		for _, val := range row {
+			if err = binary.Write(buf, binary.LittleEndian, val); err != nil {
+				logErr(err, "encodeFloat64Slice2D")
+				return nil, err
+			}
 		}
 	}
 
@@ -319,6 +434,29 @@ func decodeFloat64Slice(data []byte) ([]float64, error) {
 			return nil, err
 		}
 		result = append(result, val)
+	}
+
+	return result, nil
+}
+
+func decodeFloat64Slice2D(data []byte, numCols uint32) ([][]float64, error) {
+	var (
+		result [][]float64
+		val    float64
+	)
+
+	buf := bytes.NewReader(data)
+
+	for buf.Len() > 0 {
+		var row []float64
+		for i := uint32(0); i < numCols; i++ {
+			if err := binary.Read(buf, binary.LittleEndian, &val); err != nil {
+				logErr(err, "decodeFloat64Slice2D")
+				return nil, err
+			}
+			row = append(row, val)
+		}
+		result = append(result, row)
 	}
 
 	return result, nil

@@ -125,7 +125,7 @@ func WithIndexLSH(confs ...*LSHConfig) Options {
 				conf.IndexName = uuid.NewString()
 			}
 
-			locality, err := lsh.New(db.stg, conf.NumRounds, conf.NumHyperPlanes, conf.SpaceDim)
+			locality, err := lsh.New(conf.IndexName, db.stg, conf.NumRounds, conf.NumHyperPlanes, conf.SpaceDim)
 			if err != nil {
 				return err
 			}

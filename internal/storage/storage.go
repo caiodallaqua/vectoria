@@ -13,6 +13,7 @@ type Contract interface {
 	Get(key string) (val []byte, err error)
 	GetWithPrefix(prefix string) (values [][]byte, err error)
 	Del(keys ...string) (err error)
+	KeyExists(key string) (exists bool, err error)
 }
 
 type Storage struct {
@@ -78,7 +79,7 @@ func (s *Storage) Add(data map[string][]byte) (err error) {
 
 func (s *Storage) Get(key string) (val []byte, err error) {
 	if s == nil {
-		err = new(nilStorageReceiverError)
+		err = &nilStorageReceiverError{}
 		logErr(err, "Get")
 		return nil, err
 	}
@@ -170,6 +171,19 @@ func (s *Storage) Del(keys ...string) (err error) {
 	}
 
 	return nil
+}
+
+func (s *Storage) KeyExists(key string) (exists bool, err error) {
+	_, err = s.Get(key)
+	if err == badger.ErrKeyNotFound {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 // To avoid panic when doing a bad init in high level packages.

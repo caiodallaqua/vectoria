@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/mastrasec/vectoria/internal/simhash"
 	"github.com/mastrasec/vectoria/internal/storage"
 
 	"github.com/google/uuid"
@@ -86,14 +87,14 @@ func TestNew(t *testing.T) {
 		},
 	}
 
-	kv, err := storage.New("")
-	assert.NoError(t, err)
-
 	for _, tc := range testCases {
 		t.Run(
 			tc.name,
 			func(t *testing.T) {
-				l, err := New(kv, tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
+				kv, err := storage.New("")
+				assert.NoError(t, err)
+
+				l, err := New("fake-index-name", kv, tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
 				assert.NoError(t, err)
 
 				assert.Equal(t, tc.want.numRounds, l.numRounds)
@@ -110,124 +111,70 @@ func TestNew(t *testing.T) {
 	}
 }
 
-// func TestValidateHyperParams_NumRounds(t *testing.T) {
-// 	testCases := []struct {
-// 		name           string
-// 		numRounds      uint32
-// 		numHyperPlanes uint32
-// 		spaceDim       uint32
-// 		err            error
-// 	}{
-// 		{
-// 			name:           "lowerBound",
-// 			numRounds:      MIN_NUM_ROUNDS,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            nil,
-// 		},
-// 		{
-// 			name:           "lessThanMin",
-// 			numRounds:      MIN_NUM_ROUNDS - 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            new(errNumRounds),
-// 		},
-// 		{
-// 			name:           "upperBound",
-// 			numRounds:      MAX_NUM_ROUNDS,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            nil,
-// 		},
-// 		{
-// 			name:           "moreThanMax",
-// 			numRounds:      MAX_NUM_ROUNDS + 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            new(errNumRounds),
-// 		},
-// 	}
+func TestNew_Persistence(t *testing.T) {
+	var (
+		path           string = t.TempDir()
+		indexName      string = "fake-index"
+		numHyperPlanes uint32 = 10
+		numRounds      uint32 = 2
+		spaceDim       uint32 = 20
+	)
 
-// 	for _, tc := range testCases {
-// 		t.Run(
-// 			tc.name,
-// 			func(t *testing.T) {
-// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-// 				assert.True(t, errors.Is(err, tc.err))
-// 			},
-// 		)
-// 	}
-// }
+	kv, err := storage.New(path)
+	assert.NoError(t, err)
+	defer kv.CloseDB()
 
-// func TestValidateHyperParams_NumHyperPlanes(t *testing.T) {
-// 	testCases := []struct {
-// 		name           string
-// 		numRounds      uint32
-// 		numHyperPlanes uint32
-// 		spaceDim       uint32
-// 		err            error
-// 	}{
-// 		{
-// 			name:           "lowerBound",
-// 			numRounds:      MIN_NUM_ROUNDS + 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            nil,
-// 		},
-// 		{
-// 			name:           "lessThanMin",
-// 			numRounds:      MIN_NUM_ROUNDS + 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES - 1,
-// 			spaceDim:       MIN_SPACE_DIM + 1,
-// 			err:            new(errNumHyperPlanes),
-// 		},
-// 	}
+	l, err := New(indexName, kv, numRounds, numHyperPlanes, spaceDim)
+	assert.NoError(t, err)
 
-// 	for _, tc := range testCases {
-// 		t.Run(
-// 			tc.name,
-// 			func(t *testing.T) {
-// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-// 				assert.True(t, errors.Is(err, tc.err))
-// 			},
-// 		)
-// 	}
-// }
+	l2, err := New(indexName, kv, 0, 0, 0)
+	assert.NoError(t, err)
 
-// func TestValidateHyperParams_SpaceDim(t *testing.T) {
-// 	testCases := []struct {
-// 		name           string
-// 		numRounds      uint32
-// 		numHyperPlanes uint32
-// 		spaceDim       uint32
-// 		err            error
-// 	}{
-// 		{
-// 			name:           "lowerBound",
-// 			numRounds:      MIN_NUM_ROUNDS + 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM,
-// 			err:            nil,
-// 		},
-// 		{
-// 			name:           "lessThanMin",
-// 			numRounds:      MIN_NUM_ROUNDS + 1,
-// 			numHyperPlanes: MIN_NUM_HYPERPLANES + 1,
-// 			spaceDim:       MIN_SPACE_DIM - 1,
-// 			err:            new(errSpaceDim),
-// 		},
-// 	}
+	err = l2.getStoredConfig()
+	assert.NoError(t, err)
 
-// 	for _, tc := range testCases {
-// 		t.Run(
-// 			tc.name,
-// 			func(t *testing.T) {
-// 				err := validateHyperParams(tc.numRounds, tc.numHyperPlanes, tc.spaceDim)
-// 				assert.True(t, errors.Is(err, tc.err))
-// 			},
-// 		)
-// 	}
-// }
+	assert.Equal(t, numHyperPlanes, l2.numHyperPlanes)
+	assert.Equal(t, numRounds, l2.numRounds)
+	assert.Equal(t, spaceDim, l2.spaceDim)
+
+	for i, hash := range l.hashes {
+		assert.ElementsMatch(t, hash.Hyperplanes, l2.hashes[i].Hyperplanes)
+	}
+}
+
+func TestGetStoredConfig(t *testing.T) {
+	var (
+		indexName      string = "fake-index"
+		numHyperPlanes uint32 = 10
+		numRounds      uint32 = 2
+		spaceDim       uint32 = 20
+	)
+
+	kv, err := storage.New("")
+	assert.NoError(t, err)
+	defer kv.CloseDB()
+
+	l, err := New(indexName, kv, numRounds, numHyperPlanes, spaceDim)
+	assert.NoError(t, err)
+
+	l2 := &LSH{
+		indexName: indexName,
+		kv:        kv,
+		hashes:    make([]simhash.SimHash, numRounds),
+	}
+
+	// Showcase that we can retrieve config from DB.
+	err = l2.getStoredConfig()
+	assert.NoError(t, err)
+
+	assert.Equal(t, numHyperPlanes, l2.numHyperPlanes)
+	assert.Equal(t, numRounds, l2.numRounds)
+	assert.Equal(t, spaceDim, l2.spaceDim)
+
+	for i, hash := range l.hashes {
+		assert.ElementsMatch(t, hash.Hyperplanes, l2.hashes[i].Hyperplanes)
+	}
+}
 
 func TestSketches(t *testing.T) {
 	tc := struct {
@@ -289,7 +236,7 @@ func TestPrepareEmbedding(t *testing.T) {
 	data, err := l.prepareEmbedding(tc.id, tc.embedding)
 	assert.NoError(t, err)
 
-	k := key("embedding", tc.id)
+	k := getEmbeddingKey(l.indexName, tc.id)
 	gotEncoded, ok := data[k]
 	if !ok {
 		t.Errorf("expected key to exist: %v", k)
@@ -335,7 +282,7 @@ func TestPrepareSketches(t *testing.T) {
 				assert.NotNil(t, data)
 
 				for _, sk := range tc.sks {
-					k := key(sk, tc.id)
+					k := getSketchKey(l.indexName, sk, tc.id)
 					got, ok := data[k]
 					if !ok {
 						t.Errorf("expected key to exist: %v", k)
@@ -473,6 +420,38 @@ func TestEncodeFloat64Slice(t *testing.T) {
 				assert.ElementsMatch(t, tc.slice, got)
 			},
 		)
+	}
+}
+
+func TestEncodeFloat64Slice2D(t *testing.T) {
+	testCases := []struct {
+		name    string
+		slice   [][]float64
+		numCols uint32 // For decoding.
+	}{
+		{
+			name: "3x2 slice",
+			slice: [][]float64{
+				{1.1, 2.2},
+				{3.3, 4.4},
+				{5.5, 6.6},
+			},
+			numCols: 2,
+		},
+		{
+			name:    "empty 2D slice",
+			slice:   [][]float64{},
+			numCols: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		data, err := encodeFloat64Slice2D(tc.slice)
+		assert.NoError(t, err)
+
+		got, err := decodeFloat64Slice2D(data, tc.numCols)
+		assert.NoError(t, err)
+		assert.ElementsMatch(t, tc.slice, got)
 	}
 }
 
@@ -767,6 +746,41 @@ func TestGetEmbeddingsFromBuckets(t *testing.T) {
 	assert.ElementsMatch(t, got[tc.id], tc.embedding)
 }
 
+func TestStoreConfig_HyperParams(t *testing.T) {
+	l := setup(t, Opts{})
+
+	configKeys := []string{
+		getIndexKey(l.indexName),
+		getNumRoundsKey(l.indexName),
+		getNumHyperPlanesKey(l.indexName),
+		getSpaceDimKey(l.indexName),
+	}
+
+	err := l.storeConfig()
+	assert.NoError(t, err)
+
+	for _, k := range configKeys {
+		exists, err := l.kv.KeyExists(k)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	}
+}
+
+func TestStoreConfig_HyperPlanes(t *testing.T) {
+	l := setup(t, Opts{})
+
+	err := l.storeConfig()
+	assert.NoError(t, err)
+
+	for i, _ := range l.hashes {
+		k := getHyperPlanesKey(l.indexName, i)
+
+		exists, err := l.kv.KeyExists(k)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	}
+}
+
 type Opts struct {
 	numRounds      uint32
 	numHyperPlanes uint32
@@ -797,7 +811,7 @@ func setup(t *testing.T, opts Opts) *LSH {
 	storage, err := storage.New("")
 	assert.NoError(t, err)
 
-	l, err = New(storage, opts.numRounds, opts.numHyperPlanes, opts.spaceDim)
+	l, err = New("fake-index-name", storage, opts.numRounds, opts.numHyperPlanes, opts.spaceDim)
 	assert.NoError(t, err)
 	assert.NotNil(t, l)
 

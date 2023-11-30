@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -306,11 +306,13 @@ func main() {
 	slog.SetDefault(logger)
 
 	var (
-		path              string = ""
-		addr              string = "127.0.0.1:8558"
-		remoteDatasetPath string = "https://github.com/mastrasec/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
-		embeddingLen      uint32 = 384
+		path string = os.TempDir() + "/vectoria-clienttt"
+		addr string = "127.0.0.1:8558"
+		// remoteDatasetPath string = "https://github.com/mastrasec/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
+		embeddingLen uint32 = 384
 	)
+
+	log.Println(path)
 
 	logger.Info("launching vector database")
 	entry, err := newEntrypoint(logger, addr, path, true,
@@ -327,20 +329,20 @@ func main() {
 	}
 	logger.Info("vector database is up")
 
-	data, err := entry.getData(remoteDatasetPath)
-	if err != nil {
-		logDebug.Error("unable to get data", "error", err.Error())
-		return
-	}
-	runtime.GC()
+	// data, err := entry.getData(remoteDatasetPath)
+	// if err != nil {
+	// 	logDebug.Error("unable to get data", "error", err.Error())
+	// 	return
+	// }
+	// runtime.GC()
 
-	logger.Info("writing to database")
-	if err := entry.writeToDB(data); err != nil {
-		logDebug.Error("unable to write to database", "error", err.Error())
-		return
-	}
-	logger.Info("finished writing to database")
-	runtime.GC()
+	// logger.Info("writing to database")
+	// if err := entry.writeToDB(data); err != nil {
+	// 	logDebug.Error("unable to write to database", "error", err.Error())
+	// 	return
+	// }
+	// logger.Info("finished writing to database")
+	// runtime.GC()
 
 	if err := entry.listen(); err != nil {
 		logDebug.Error("unable to listen to server", "error", err.Error())

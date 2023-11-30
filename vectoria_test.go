@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/mastrasec/vectoria/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slog"
 )
@@ -134,10 +135,13 @@ func TestWithIndexLSH(t *testing.T) {
 		t.Run(
 			tc.name,
 			func(t *testing.T) {
-				db := newDB(nil)
+				stg, err := storage.New("")
+				assert.NoError(t, err)
+
+				db := newDB(stg)
 
 				f := WithIndexLSH(tc.confs...)
-				err := f(db)
+				err = f(db)
 				assert.NoError(t, err)
 
 				assert.Equal(t, db.indexRef.len(), tc.wantNumIndexes)
