@@ -1,17 +1,20 @@
 <script lang="ts">
-    import axios from "axios";
+    import axios, { AxiosError, type AxiosResponse } from "axios";
     import { onMount } from "svelte";
     import { fade, fly } from "svelte/transition";
     import { pipeline, env } from "@xenova/transformers";
-  
+    import { error } from "@sveltejs/kit";
+
     env.allowLocalModels = false;
     const pipe = pipeline(
       "feature-extraction",
       "mastrasec/vectoria-demo-all-MiniLM-L6-v2"
     );
   
+    let errorMsg = "";
+
     let term = "";
-  
+
     let photos: {
       id: string;
     }[] = [];
@@ -20,10 +23,10 @@
     let threshold = 0.5;
   
     const configServer = async () => {
-      await axios
-        .get("http://localhost:8558/system/health")
-        .catch((error) => {
-          console.error("Error checking server health:", error);
+      return await axios.get("http://localhost:8558/system/health")
+        .catch((err: AxiosError) => {
+          errorMsg = "Oops! Unable to connect to the server."
+          console.log("server health returned error:", err.message)
         });
     };
   
@@ -47,20 +50,25 @@
             .then((res) => {
               photos = res.data.ids.map((id: string) => ({ id: id }));
             })
-            .catch((error) => {
-              console.error("Unable to get similar items:", error);
+            .catch((err) => {
+              errorMsg = "Oops! Unable to fetch data from server."
+              console.error("could not fetch data from server", err.message);
             });
         })
-        .catch((error) => {
-          console.error("An error occurred:", error);
+        .catch((err: AxiosError) => {
+          errorMsg = "Oops! We had a problem when encoding the text. This is likely a client-side issue."
+          console.error("could not encode search term", err.message);
         });
     };
-  
+
+
     let search_ref: any;
     
     onMount(() => {
       search_ref.focus(); 
-      configServer().then(() => fetchData());
+      configServer().then(
+        () => fetchData()
+      );
     });
   
     const handleSearch = async () => {
@@ -95,35 +103,33 @@
         </div>
       </form>
     </div>
-    <div class="photos">
-      {#each photos as photo, i (photo.id)}
-        <img
-          src={photo.id}
-          alt=""
-          class="image"
-          in:fly={{ y: 200, duration: 2000, delay: i * 200 }}
-          out:fade
-        />
-      {/each}
-    </div>
+    {#if errorMsg}
+      <div class="error-message">
+        {errorMsg}
+      </div>
+    {:else}
+      <div class="photos">
+        {#each photos as photo, i (photo.id)}
+          <img
+            src={photo.id}
+            alt=""
+            class="image"
+            in:fly={{ y: 200, duration: 2000, delay: i * 200 }}
+            out:fade
+          />
+        {/each}
+      </div>
+    {/if}
   </div>
   
   <style>
     * {
       margin: 0;
     }
-    .container {
-      width: 100%;
-      min-height: 200vh;
-      background-image: linear-gradient(rgba(0, 8, 51, 0.85), rgba(0, 8, 51, 0.9)),
-        url(background.jpg);
-      background-position: center;
-      background-size: cover;
-      background-repeat: repeat-y;
-      color: white;
-      font-family: sans-serif;
+    .error-message {
+      display: flex;
       justify-content: center;
-      padding-top: 5vh;
+      font-size: 30px ;
     }
     .image {
       width: 400px;
