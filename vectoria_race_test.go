@@ -11,11 +11,18 @@ import (
 )
 
 func TestRaceAdd(t *testing.T) {
-	var spaceDim uint32 = 3
+	var (
+		spaceDim  uint32 = 3
+		indexName string = "fake-index-name"
+	)
 
-	db, err := New("", WithIndexLSH(&LSHConfig{
-		SpaceDim: spaceDim,
-	}))
+	db, err := New(DBConfig{
+		Path: "",
+		LSH: []LSHConfig{{
+			IndexName: indexName,
+			SpaceDim:  spaceDim,
+		}},
+	})
 	assert.NoError(t, err)
 
 	for i := 0; i <= 1000; i++ {
@@ -24,7 +31,7 @@ func TestRaceAdd(t *testing.T) {
 			gofakeit.Slice(&itemVec)
 			itemID := uuid.NewString()
 
-			err := db.Add(itemID, itemVec)
+			err := db.Add(itemID, itemVec, indexName)
 			assert.NoError(t, err)
 		}()
 	}

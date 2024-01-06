@@ -69,7 +69,7 @@ func TestRegisterRoutes(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 
-	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false)
+	entry, err := newEntrypoint(logger, gofakeit.URL(), false, vectoria.DBConfig{})
 	assert.NoError(t, err)
 
 	entry.registerRoutes()
@@ -88,13 +88,16 @@ func TestRegisterRoutes(t *testing.T) {
 func TestAdd(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 
-	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false,
-		vectoria.WithIndexLSH(&vectoria.LSHConfig{
-			IndexName:      "demo",
-			NumRounds:      10,
-			NumHyperPlanes: 100,
-			SpaceDim:       3,
-		}),
+	entry, err := newEntrypoint(logger, gofakeit.URL(), false,
+		vectoria.DBConfig{
+			Path: "",
+			LSH: []vectoria.LSHConfig{{
+				IndexName:      "demo",
+				NumRounds:      10,
+				NumHyperPlanes: 100,
+				SpaceDim:       3,
+			}},
+		},
 	)
 	assert.NoError(t, err)
 
@@ -115,13 +118,16 @@ func TestAdd(t *testing.T) {
 func TestGet(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(nil, nil))
 
-	entry, err := newEntrypoint(logger, gofakeit.URL(), "", false,
-		vectoria.WithIndexLSH(&vectoria.LSHConfig{
-			IndexName:      "demo",
-			NumRounds:      10,
-			NumHyperPlanes: 100,
-			SpaceDim:       3,
-		}),
+	entry, err := newEntrypoint(logger, gofakeit.URL(), false,
+		vectoria.DBConfig{
+			Path: "",
+			LSH: []vectoria.LSHConfig{{
+				IndexName:      "demo",
+				NumRounds:      10,
+				NumHyperPlanes: 100,
+				SpaceDim:       3,
+			}},
+		},
 	)
 	assert.NoError(t, err)
 

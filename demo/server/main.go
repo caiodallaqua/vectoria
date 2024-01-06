@@ -70,12 +70,12 @@ type newReq struct {
 
 type newRes struct{}
 
-func newEntrypoint(logger *slog.Logger, addr, path string, shouldLogDB bool, opts ...vectoria.Options) (*entrypoint, error) {
+func newEntrypoint(logger *slog.Logger, addr string, shouldLogDB bool, dbConfig vectoria.DBConfig) (*entrypoint, error) {
 	if logger == nil {
 		return nil, errors.New("logger cannot be nil")
 	}
 
-	db, err := vectoria.New(path, opts...)
+	db, err := vectoria.New(dbConfig)
 	if err != nil {
 		logger.Error("unable to create database", "function", "newEntrypoint", "error", err)
 		return nil, err
@@ -83,7 +83,7 @@ func newEntrypoint(logger *slog.Logger, addr, path string, shouldLogDB bool, opt
 
 	return &entrypoint{
 		addr:   addr,
-		path:   path,
+		path:   dbConfig.Path,
 		app:    newApp(shouldLogDB),
 		db:     db,
 		logger: logger,
@@ -168,10 +168,11 @@ func (entry *entrypoint) new(ctx *fiber.Ctx) error {
 		return ctx.Status(http.StatusBadRequest).SendString("{}")
 	}
 
-	_, err := vectoria.New(
-		payload.Path,
-		vectoria.WithIndexLSH(payload.LSHConfs...),
-	)
+	dbConfig := vectoria.DBConfig{
+		Path: payload.Path,
+	}
+
+	_, err := vectoria.New(dbConfig)
 	if err != nil {
 		logDebug.Error("unable to create database instance", "error", err.Error())
 		return ctx.Status(http.StatusInternalServerError).SendString("{}")
@@ -316,13 +317,16 @@ func main() {
 	log.Println(path)
 
 	logger.Info("launching vector database")
-	entry, err := newEntrypoint(logger, addr, path, true,
-		vectoria.WithIndexLSH(&vectoria.LSHConfig{
-			IndexName:      "demo",
-			NumRounds:      50,
-			NumHyperPlanes: 20,
-			SpaceDim:       embeddingLen,
-		}),
+	entry, err := newEntrypoint(logger, addr, true,
+		vectoria.DBConfig{
+			Path: path,
+			LSH: []vectoria.LSHConfig{{
+				IndexName:      "demo",
+				NumRounds:      50,
+				NumHyperPlanes: 20,
+				SpaceDim:       embeddingLen,
+			}},
+		},
 	)
 	if err != nil {
 		logDebug.Error("unable to create entrypoint", "error", err.Error())

@@ -19,66 +19,72 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// TODO: Add TestGet.
+// Instead of computing the probability for each entry by running several instances,
+// here it's better to have a single DB instance where many items are added
+// and the acceptance is given by the % of agreement with the ground truth.
+
 func TestNew(t *testing.T) {
 	testCases := []struct {
-		name           string
-		opts           []Options
+		testName       string
+		dbConfig       DBConfig
 		wantNumIndexes int
 		err            error
 	}{
 		{
-			name:           "no options",
-			opts:           []Options{},
-			wantNumIndexes: 1,
-			err:            nil,
-		},
-		{
-			name: "WithLog",
-			opts: []Options{
-				WithLog(),
-			},
-			wantNumIndexes: 1,
-			err:            nil,
-		},
-		{
-			name: "WithLog WithIndexLSH",
-			opts: []Options{
-				WithLog(),
-				WithIndexLSH(),
-			},
-			wantNumIndexes: 1,
-			err:            nil,
-		},
-		{
-			name: "WithLog WithIndexLSH",
-			opts: []Options{
-				WithLog(),
-				WithIndexLSH(),
-				WithIndexLSH(),
+			testName: "no index",
+			dbConfig: DBConfig{
+				Path: "",
+				LSH:  []LSHConfig{},
 			},
 			wantNumIndexes: 0,
-			err:            new(withIndexLSHDuplicationError),
+			err:            nil,
 		},
 		{
-			name: "WithLog WithIndexLSH",
-			opts: []Options{
-				WithLog(),
-				WithLog(),
-				WithIndexLSH(),
+			testName: "single index",
+			dbConfig: DBConfig{
+				Path: "",
+				LSH: []LSHConfig{
+					{
+						IndexName:      "fake-index-name",
+						NumRounds:      3,
+						NumHyperPlanes: 4,
+						SpaceDim:       5,
+					},
+				},
+			},
+			wantNumIndexes: 1,
+			err:            nil,
+		},
+		{
+			testName: "index duplication",
+			dbConfig: DBConfig{
+				Path: "",
+				LSH: []LSHConfig{
+					{
+						IndexName:      "duplicated-index-name",
+						NumRounds:      3,
+						NumHyperPlanes: 4,
+						SpaceDim:       5,
+					},
+					{
+						IndexName: "duplicated-index-name",
+					},
+				},
 			},
 			wantNumIndexes: 0,
-			err:            new(withLogDuplicationError),
+			err:            &indexAlreadyExistsError{},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(
-			tc.name,
+			tc.testName,
 			func(t *testing.T) {
-				db, err := New("", tc.opts...)
+				db, err := New(tc.dbConfig)
 				assert.IsType(t, err, tc.err)
-
-				if db != nil {
+				if tc.err == nil {
+					assert.NotNil(t, db)
 					assert.Equal(t, db.indexRef.len(), tc.wantNumIndexes)
 				}
 			},
@@ -86,65 +92,68 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestWithLog(t *testing.T) {
-	db := newDB(nil)
-	f := WithLog()
-
-	err := f(db)
-	assert.NoError(t, err)
-	assert.True(t, db.log)
-	assert.True(t, db.called["WithLog"])
-}
-
-func TestWithIndexLSH(t *testing.T) {
+func TestAddLSH(t *testing.T) {
 	testCases := []struct {
-		name           string
-		confs          []*LSHConfig
+		testName       string
+		configs        []LSHConfig
 		wantNumIndexes int
+		err            error
 	}{
 		{
-			// Creates a default LSH index if no args are passed.
-			name:           "no args",
-			confs:          []*LSHConfig{},
+			testName: "happy path",
+			configs: []LSHConfig{
+				{
+					IndexName:      "fake-index-name",
+					NumRounds:      3,
+					NumHyperPlanes: 4,
+					SpaceDim:       5,
+				},
+			},
+			err:            nil,
 			wantNumIndexes: 1,
 		},
 		{
-			// Creates a default LSH index to overwrite zero values.
-			name:           "one arg: empty",
-			confs:          []*LSHConfig{{}},
-			wantNumIndexes: 1,
-		},
-		{
-			// Nil args are ignored. This is a protection against misuse.
-			name:           "two args: empty, nil",
-			confs:          []*LSHConfig{{}, nil},
-			wantNumIndexes: 1,
-		},
-		{
-			name: "one arg: non-empty",
-			confs: []*LSHConfig{{
-				NumRounds:      12,
-				NumHyperPlanes: 20,
-				SpaceDim:       100,
-			}},
-			wantNumIndexes: 1,
+			testName: "duplicated index",
+			configs: []LSHConfig{
+				{
+					IndexName: "duplicated-index-name",
+				},
+				{
+					IndexName: "duplicated-index-name",
+				},
+			},
+			err:            &indexAlreadyExistsError{},
+			wantNumIndexes: 0,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(
-			tc.name,
+			tc.testName,
 			func(t *testing.T) {
 				stg, err := storage.New("")
 				assert.NoError(t, err)
 
 				db := newDB(stg)
 
-				f := WithIndexLSH(tc.confs...)
-				err = f(db)
-				assert.NoError(t, err)
+				err = db.addLSH(tc.configs...)
+				assert.IsType(t, tc.err, err)
 
 				assert.Equal(t, db.indexRef.len(), tc.wantNumIndexes)
+
+				if tc.err == nil {
+					for _, config := range tc.configs {
+						idx, ok := db.indexRef.get(config.IndexName)
+						assert.True(t, ok)
+						assert.NotNil(t, idx)
+
+						info := idx.info()
+
+						assert.Equal(t, config.NumRounds, info["numRounds"])
+						assert.Equal(t, config.NumHyperPlanes, info["numHyperPlanes"])
+						assert.Equal(t, config.SpaceDim, info["spaceDim"])
+					}
+				}
 			},
 		)
 	}
@@ -152,55 +161,37 @@ func TestWithIndexLSH(t *testing.T) {
 
 func TestAdd(t *testing.T) {
 	testCases := []struct {
-		name       string
-		opts       []Options
+		testName   string
+		dbConfig   DBConfig
 		indexNames []string
 		itemID     string
 		itemVec    []float64
 		err        error
 	}{
 		{
-			name:       "no options, all indexes",
-			opts:       []Options{},
+			testName:   "empty config, all indexes",
+			dbConfig:   DBConfig{},
 			indexNames: []string{},
 			itemID:     uuid.NewString(),
 			itemVec:    []float64{1, 2},
-			err:        nil,
+			err:        &dbHasNoIndexError{},
 		},
 		{
-			name:       "no options, wrong index",
-			opts:       []Options{},
-			indexNames: []string{"wrong-index-name"},
+			testName:   "empty config, specific index",
+			dbConfig:   DBConfig{},
+			indexNames: []string{"some-index-name"},
 			itemID:     uuid.NewString(),
 			itemVec:    []float64{},
-			err:        new(indexDoesNotExistError),
+			err:        &dbHasNoIndexError{},
 		},
 		{
-			name: "empty WithIndexLSH, all indexes",
-			opts: []Options{
-				WithIndexLSH(),
-			},
-			indexNames: []string{},
-			itemID:     uuid.NewString(),
-			itemVec:    []float64{1, 2},
-			err:        nil,
-		},
-		{
-			name: "empty WithIndexLSH, wrong index",
-			opts: []Options{
-				WithIndexLSH(),
-			},
-			indexNames: []string{"wrong-index-name"},
-			itemID:     uuid.NewString(),
-			itemVec:    []float64{1, 2},
-			err:        new(indexDoesNotExistError),
-		},
-		{
-			name: "happy path, all indexes",
-			opts: []Options{
-				WithIndexLSH(&LSHConfig{
-					SpaceDim: 3,
-				}),
+			testName: "happy path, all indexes",
+			dbConfig: DBConfig{
+				LSH: []LSHConfig{
+					{
+						SpaceDim: 3,
+					},
+				},
 			},
 			indexNames: []string{},
 			itemID:     uuid.NewString(),
@@ -208,12 +199,14 @@ func TestAdd(t *testing.T) {
 			err:        nil,
 		},
 		{
-			name: "happy path, specific index",
-			opts: []Options{
-				WithIndexLSH(&LSHConfig{
-					IndexName: "dumb-index-name",
-					SpaceDim:  3,
-				}),
+			testName: "happy path, specific index",
+			dbConfig: DBConfig{
+				LSH: []LSHConfig{
+					{
+						IndexName: "dumb-index-name",
+						SpaceDim:  3,
+					},
+				},
 			},
 			indexNames: []string{"dumb-index-name"},
 			itemID:     uuid.NewString(),
@@ -224,19 +217,27 @@ func TestAdd(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(
-			tc.name,
+			tc.testName,
 			func(t *testing.T) {
-				db, err := New("", tc.opts...)
+				db, err := New(tc.dbConfig)
 				assert.NoError(t, err)
 
 				err = db.Add(tc.itemID, tc.itemVec, tc.indexNames...)
 				assert.IsType(t, tc.err, err)
+
+				if tc.err == nil {
+					res, err := db.Get(tc.itemVec, 0.9, 1, tc.indexNames...)
+					assert.NoError(t, err)
+
+					for index, keys := range res {
+						if len(tc.indexNames) != 0 {
+							assert.Contains(t, tc.indexNames, index)
+						}
+
+						assert.Contains(t, keys, tc.itemID)
+					}
+				}
 			},
 		)
 	}
 }
-
-// TODO: Add TestGet.
-// Instead of computing the probability for each entry by running several instances,
-// here it's better to have a single DB instance where many items are added
-// and the acceptance is given by the % of agreement with the ground truth.

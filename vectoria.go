@@ -60,82 +60,79 @@ func (sm *safeMap) get(key string) (index, bool) {
 	return idx, ok
 }
 
+func (sm *safeMap) del(key string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	delete(sm.items, key)
+}
+
+func (sm *safeMap) keyExists(key string) bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	_, exists := sm.items[key]
+
+	return exists
+}
+
 func (sm *safeMap) len() int {
 	return len(sm.items)
 }
 
 // =================================== API ===================================
 
-func New(path string, opts ...Options) (db *DB, err error) {
-	stg, err := storage.New(path)
+type DBConfig struct {
+	Path string
+	log  bool
+
+	LSH []LSHConfig
+}
+
+func (conf LSHConfig) indexName() string {
+	return conf.IndexName
+}
+
+func New(config DBConfig) (db *DB, err error) {
+	stg, err := storage.New(config.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	db = newDB(stg)
 
-	for _, opt := range opts {
-		if err = opt(db); err != nil {
-			return nil, err
-		}
-	}
-
-	// Handle case when no index is passed to opts
-	if len(db.indexRef.items) == 0 {
-		if err = WithIndexLSH()(db); err != nil {
-			return nil, err
-		}
+	if err := db.addLSH(config.LSH...); err != nil {
+		return nil, err
 	}
 
 	return db, nil
 }
 
-func WithLog() Options {
-	return func(db *DB) error {
-		if _, ok := db.called["WithLog"]; ok {
-			return new(withLogDuplicationError)
+func (db *DB) addLSH(configs ...LSHConfig) error {
+	for i, config := range configs {
+		if exists := db.indexExists(config.IndexName); exists {
+			db.addLSHRollback(configs[:i+1]...)
+			return &indexAlreadyExistsError{config.IndexName}
 		}
-		db.called["WithLog"] = true
 
-		db.log = true
+		if config.IndexName == "" {
+			config.IndexName = uuid.NewString()
+		}
 
-		return nil
+		locality, err := lsh.New(config.IndexName, db.stg, config.NumRounds, config.NumHyperPlanes, config.SpaceDim)
+		if err != nil {
+			return err
+		}
+
+		db.indexRef.add(config.IndexName, &lshIndex{locality: locality})
 	}
+
+	return nil
 }
 
-func WithIndexLSH(confs ...*LSHConfig) Options {
-	return func(db *DB) error {
-		funcName := "WithIndexLSH"
-
-		if _, ok := db.called[funcName]; ok {
-			return new(withIndexLSHDuplicationError)
-		}
-		db.called[funcName] = true
-
-		if len(confs) == 0 {
-			confs = append(confs, new(LSHConfig))
-		}
-
-		for _, conf := range confs {
-			if conf == nil {
-				continue
-			}
-
-			if conf.IndexName == "" {
-				conf.IndexName = uuid.NewString()
-			}
-
-			locality, err := lsh.New(conf.IndexName, db.stg, conf.NumRounds, conf.NumHyperPlanes, conf.SpaceDim)
-			if err != nil {
-				return err
-			}
-
-			newIndex := &lshIndex{locality: locality}
-
-			db.indexRef.add(conf.IndexName, newIndex)
-		}
-
-		return nil
+func (db *DB) addLSHRollback(configs ...LSHConfig) {
+	for _, config := range configs {
+		db.indexRef.del(config.IndexName)
 	}
 }
 
@@ -143,8 +140,16 @@ func (db *DB) Indexes() []string {
 	return maps.Keys(db.indexRef.items)
 }
 
+func (db *DB) NumIndexes() uint32 {
+	return uint32(len(db.Indexes()))
+}
+
 // TODO: rollback on err
 func (db *DB) Add(itemID string, itemVec []float64, indexNames ...string) error {
+	if db.NumIndexes() == 0 {
+		return &dbHasNoIndexError{}
+	}
+
 	if len(indexNames) == 0 {
 		indexNames = db.Indexes()
 	}
@@ -191,6 +196,10 @@ func (db *DB) clean(itemID string, indexNames ...string) {
 	// TODO: delete all
 }
 
+func (db *DB) indexExists(indexName string) bool {
+	return db.indexRef.keyExists(indexName)
+}
+
 // =================================== INDEXES ===================================
 
 type index interface {
@@ -234,16 +243,12 @@ func (l *lshIndex) info() map[string]any {
 
 // =================================== ERRORS ===================================
 
-type withLogDuplicationError struct{}
-
-func (e *withLogDuplicationError) Error() string {
-	return "WithLog() duplication."
+type indexAlreadyExistsError struct {
+	name string
 }
 
-type withIndexLSHDuplicationError struct{}
-
-func (e *withIndexLSHDuplicationError) Error() string {
-	return "WithIndexLSH() duplication."
+func (e *indexAlreadyExistsError) Error() string {
+	return fmt.Sprintf("index %s already exists.", e.name)
 }
 
 type indexDoesNotExistError struct {
@@ -252,4 +257,10 @@ type indexDoesNotExistError struct {
 
 func (e *indexDoesNotExistError) Error() string {
 	return fmt.Sprintf("index %s does not exist.", e.name)
+}
+
+type dbHasNoIndexError struct{}
+
+func (e *dbHasNoIndexError) Error() string {
+	return "database has no index."
 }
