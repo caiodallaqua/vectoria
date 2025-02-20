@@ -2,8 +2,6 @@ module github.com/caiodallaqua/vectoria
 
 go 1.23.6
 
-replace github.com/caiodallaqua/vectoria => .
-
 require (
 	github.com/brianvoe/gofakeit v3.18.0+incompatible
 	github.com/brianvoe/gofakeit/v6 v6.28.0
