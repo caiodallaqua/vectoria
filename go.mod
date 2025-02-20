@@ -1,13 +1,15 @@
-module github.com/mastrasec/vectoria
+module github.com/caiodallaqua/vectoria
 
-go 1.21.3
+go 1.23.6
+
+replace github.com/caiodallaqua/vectoria => .
 
 require (
-	github.com/brianvoe/gofakeit/v6 v6.23.2
+	github.com/brianvoe/gofakeit v3.18.0+incompatible
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/dgraph-io/badger/v3 v3.2103.5
-	github.com/google/uuid v1.3.1
-	github.com/stretchr/testify v1.8.4
-	golang.org/x/exp v0.0.0-20231005195138-3e424a577f31
+	github.com/google/uuid v1.6.0
+	github.com/stretchr/testify v1.10.0
 )
 
 require (
@@ -27,6 +29,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opencensus.io v0.22.5 // indirect
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/sys v0.0.0-20221010170243-090e33056c14 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

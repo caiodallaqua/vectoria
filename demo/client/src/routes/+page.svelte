@@ -8,7 +8,7 @@
     env.allowLocalModels = false;
     const pipe = pipeline(
       "feature-extraction",
-      "mastrasec/vectoria-demo-all-MiniLM-L6-v2"
+      "caiodallaqua/vectoria-demo-all-MiniLM-L6-v2"
     );
   
     let errorMsg = "";

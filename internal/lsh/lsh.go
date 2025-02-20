@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"maps"
 
-	"github.com/mastrasec/vectoria/internal/semantic"
-	"github.com/mastrasec/vectoria/internal/simhash"
-	"github.com/mastrasec/vectoria/internal/storage"
+	"github.com/caiodallaqua/vectoria/internal/semantic"
+	"github.com/caiodallaqua/vectoria/internal/simhash"
+	"github.com/caiodallaqua/vectoria/internal/storage"
 )
 
 const (
