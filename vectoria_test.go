@@ -2,13 +2,13 @@ package vectoria
 
 import (
 	"io"
+	"log/slog"
 	"os"
 	"testing"
 
+	"github.com/caiodallaqua/vectoria/internal/storage"
 	"github.com/google/uuid"
-	"github.com/mastrasec/vectoria/internal/storage"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/slog"
 )
 
 func TestMain(m *testing.M) {

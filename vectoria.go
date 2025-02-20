@@ -3,12 +3,13 @@ package vectoria
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
+	"github.com/caiodallaqua/vectoria/internal/lsh"
+	"github.com/caiodallaqua/vectoria/internal/storage"
 	"github.com/google/uuid"
-	"github.com/mastrasec/vectoria/internal/lsh"
-	"github.com/mastrasec/vectoria/internal/storage"
-	"golang.org/x/exp/maps"
 )
 
 type DB struct {
@@ -137,7 +138,7 @@ func (db *DB) addLSHRollback(configs ...LSHConfig) {
 }
 
 func (db *DB) Indexes() []string {
-	return maps.Keys(db.indexRef.items)
+	return slices.Collect(maps.Keys(db.indexRef.items))
 }
 
 func (db *DB) NumIndexes() uint32 {
