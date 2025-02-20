@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit"
+	"github.com/caiodallaqua/vectoria"
 	"github.com/gofiber/fiber/v2"
-	"github.com/mastrasec/vectoria"
 	"github.com/steinfletcher/apitest"
 	"github.com/stretchr/testify/assert"
 )
