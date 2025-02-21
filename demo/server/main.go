@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caiodallaqua/vectoria"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/mastrasec/vectoria"
 	"github.com/xitongsys/parquet-go-source/local"
 	"github.com/xitongsys/parquet-go/reader"
 )
@@ -309,8 +309,8 @@ func main() {
 
 	var (
 		path              string = ""
-		addr              string = "127.0.0.1:8558"
-		remoteDatasetPath string = "https://github.com/mastrasec/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
+		addr              string = "0.0.0.0:8558"
+		remoteDatasetPath string = "https://github.com/caiodallaqua/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
 		embeddingLen      uint32 = 384
 	)
 
