@@ -309,7 +309,7 @@ func main() {
 
 	var (
 		path              string = ""
-		addr              string = "127.0.0.1:8558"
+		addr              string = "0.0.0.0:8558"
 		remoteDatasetPath string = "https://github.com/caiodallaqua/vectoria/releases/download/demo_dataset_v0/sbu_captions_embeddings.parquet"
 		embeddingLen      uint32 = 384
 	)

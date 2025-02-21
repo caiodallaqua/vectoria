@@ -22,14 +22,16 @@
     let k = 10;
     let threshold = 0.5;
   
+    const addr = "http://localhost:8558"
+
     const configServer = async () => {
-      return await axios.get("http://localhost:8558/system/health")
+      return await axios.get(`${addr}/system/health`)
         .catch((err: AxiosError) => {
           errorMsg = "Oops! Unable to connect to the server."
           console.log("server health returned error:", err.message)
         });
     };
-  
+
     const fetchData = async () => {
       pipe
         .then((encode) => {
@@ -41,7 +43,7 @@
           );
   
           const response = axios
-            .post("http://localhost:8558/get", {
+            .post(`${addr}/get`, {
               index_name: "demo",
               query: jsonArray,
               threshold: threshold,
