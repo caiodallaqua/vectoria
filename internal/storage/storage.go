@@ -98,7 +98,6 @@ func (s *Storage) Get(key string) (val []byte, err error) {
 		return nil
 	})
 	if err != nil {
-		logErr(err, "Get")
 		return nil, err
 	}
 
