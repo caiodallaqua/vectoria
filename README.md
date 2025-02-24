@@ -30,7 +30,7 @@ func main() {
 	)
 
 	dbConfig := vectoria.DBConfig{
-		Path: "", // in-memory
+		Path: "", // In-memory storage.
 		LSH: []vectoria.LSHConfig{{
 			IndexName:      indexName,
 			NumRounds:      5,
